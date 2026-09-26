@@ -22,6 +22,7 @@ Every report in this folder is at most 150 lines. Verified on 2026-09-26.
 | 12 | [12_robot_agent.md](12_robot_agent.md) | Persistent robot agent: fast TCP commands, instant stop |
 | 13 | [13_human_in_the_loop.md](13_human_in_the_loop.md) | Operator web UI; robot asks when unsure; answers become training data; okra_data/ |
 | 14 | [14_spatial_awareness_closed_loop.md](14_spatial_awareness_closed_loop.md) | Body pose from legs + IMU; closed-loop reach that follows body motion |
+| 15 | [15_vm_tuning.md](15_vm_tuning.md) | VM disk resize, VirtualBox settings (GUI), green turtle / Hyper-V fix |
 
 ## System at a glance
 

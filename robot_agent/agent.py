@@ -16,7 +16,8 @@ Protocol: newline-delimited JSON over TCP.
 Commands: ping, status, watch, stop, ai, damp, ready, start, zero, step, head, gripper, say, led, anchor.
 Status includes the body pose (okra_pick/robot/body_pose.py): pelvis shift relative to the feet since the
 last anchor, and whether both feet still agree (a disagreement = a foot moved).
-One motion command runs at a time (others get "busy"); "stop" is always accepted: it sends zero velocity
+One motion command runs at a time (others get "busy"); "stop" is always accepted: it sends Ctrl-C (SIGINT) to a
+running okra arm_player.py (it aborts: opens the gripper if needed, plays its path back), sends zero velocity
 and cancels the running task (which then centres/releases the waist or finishes its own safe exit).
 """
 
@@ -26,6 +27,7 @@ import math
 import os
 import socket
 import socketserver
+import subprocess
 import sys
 import threading
 import time
@@ -50,6 +52,23 @@ L_KNEE, R_KNEE = 3, 9
 
 
 # ======================================================================= robot interfaces
+
+
+# the okra pick player (okra_pick/robot/arm_player.py) runs as its own process; SIGINT = its clean abort.
+# Anchored on the interpreter so the "bash -c ... arm_player.py" wrapper is not hit.
+ARM_PLAYER_PATTERN = r"^[^ ]*python[0-9.]* [^ ]*arm_player\.py"
+
+
+def interrupt_arm_player():
+    """SIGINT every running arm_player.py. Returns the pids signalled."""
+    try:
+        pids = subprocess.run(["pgrep", "-f", ARM_PLAYER_PATTERN], capture_output=True, text=True,
+                              timeout=2).stdout.split()
+        if pids:
+            subprocess.run(["kill", "-INT"] + pids, timeout=2)
+        return [int(p) for p in pids]
+    except Exception as e:  # noqa: BLE001 - stop must still zero the velocity
+        return "error: %s" % e
 
 class RealRobot:
     def __init__(self, iface):
@@ -348,12 +367,13 @@ class Agent:
     def cmd_stop(self, a, emit):
         task = self.busy
         self.cancel.set()
+        players = interrupt_arm_player()
         replies = []
         for _ in range(3):
             with self.loco_lock:
                 replies.append(self.r.velocity(0.0, 0.0, 0.0, 1.0))
             time.sleep(0.05)
-        return {"velocity_zero_replies": replies, "cancelled_task": task}
+        return {"velocity_zero_replies": replies, "cancelled_task": task, "arm_player_interrupted": players}
 
     def cmd_ai(self, a, emit):
         def run(emit):

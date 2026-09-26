@@ -54,6 +54,38 @@ def agent_call(cmd, args=None, timeout=15.0):
     return {"ok": False, "error": "no reply", "log": logs}
 
 
+ROBOT_SSH = "unitree@" + AGENT.rsplit(":", 1)[0]
+# SIGINT = arm_player's clean abort; anchored on the interpreter so the "bash -c" wrapper is not hit
+KILL_PLAYER = r"pkill -INT -e -f '^[^ ]*python[0-9.]* [^ ]*arm_player\.py' || echo 'no arm_player running'"
+
+
+def stop_all():
+    """STOP: interrupt the arm player over ssh directly (works without the agent) and, in parallel,
+    agent 'stop' (zero velocity, cancel its task, and it also interrupts the player)."""
+    out = {}
+
+    def direct():
+        try:
+            p = subprocess.run(["ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", ROBOT_SSH, KILL_PLAYER],
+                               capture_output=True, text=True, timeout=6)
+            out["direct"] = (p.stdout + p.stderr).strip() or "rc %d" % p.returncode
+            out["direct_ok"] = p.returncode == 0
+        except Exception as e:  # noqa: BLE001
+            out["direct"], out["direct_ok"] = "ssh failed: %s" % e, False
+
+    t = threading.Thread(target=direct)
+    t.start()
+    try:
+        r = agent_call("stop", timeout=10.0)
+    except Exception as e:  # noqa: BLE001 - agent may be offline; the direct path still counts
+        r = {"ok": False, "error": "agent offline (%s)" % e.__class__.__name__, "log": []}
+    t.join()
+    r["log"] = r.get("log", []) + ["arm player (ssh): " + out["direct"]]
+    if not r.get("ok") and out["direct_ok"]:
+        r["ok"], r["result"] = True, {"arm_player": out["direct"], "agent": r.pop("error", None)}
+    return r
+
+
 class StatePoller(threading.Thread):
     """Robot state at ~4 Hz (cheap TCP call) and recording status every 5 s (ssh)."""
 
@@ -223,6 +255,8 @@ class Handler(BaseHTTPRequestHandler):
             cmd = b.get("cmd")
             if cmd not in ROBOT_CMDS:
                 raise ValueError("command not allowed: %s" % cmd)
+            if cmd == "stop":
+                return stop_all()
             return agent_call(cmd, b.get("args"), timeout=60.0)
         if path == "/api/look":
             mode = b.get("mode") or None

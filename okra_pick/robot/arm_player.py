@@ -15,6 +15,8 @@ check it holds something -> finish -> blend out over 2 s.
 Monitors every tick (abort): tilt drift, stale state, tracking error, and joint torque during the pull.
 Abort = stop advancing; if the pod is held during the pull, open the gripper; then play the executed path
 backwards to the start pose and blend out. Ctrl-C does the same.
+Operator link lost (ssh dropped: SIGHUP/SIGTERM, or the terminal/pipe is gone) = abort too: the robot
+finishes the safe exit on its own. All output is also written to player.log next to the trajectory.
 """
 
 import argparse
@@ -32,6 +34,51 @@ sys.path.insert(0, HERE)
 import pick_config as C  # noqa: E402
 
 MAIN_FSM = (200, 500, 501)
+STOP = threading.Event()        # set by Ctrl-C / SIGHUP / SIGTERM / lost terminal; the player aborts on it
+
+
+class SafeOut:
+    """stdout/stderr that never raises: tees to a log file, and when the terminal/ssh pipe is gone
+    (EIO / EPIPE) it keeps logging only and sets STOP (nobody is watching the robot any more)."""
+
+    def __init__(self, stream, log):
+        self.stream, self.log, self.alive = stream, log, True
+
+    def write(self, text):
+        try:
+            self.log.write(text)
+            self.log.flush()
+        except Exception:  # noqa: BLE001
+            pass
+        if self.alive:
+            try:
+                self.stream.write(text)
+                self.stream.flush()
+            except Exception:  # noqa: BLE001 - EIO (pty closed) / BrokenPipeError (ssh -T closed)
+                self.alive = False
+                if not STOP.is_set():
+                    STOP.set()
+                    self.log.write("\n[operator link lost: aborting]\n")
+        return len(text)
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return False
+
+
+def install_safety(log_path):
+    log = open(log_path, "a")
+    log.write("\n==== %s  pid %d  %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), os.getpid(), " ".join(sys.argv)))
+    sys.stdout, sys.stderr = SafeOut(sys.stdout, log), SafeOut(sys.stderr, log)
+
+    def on_signal(num, _frame):
+        if not STOP.is_set():
+            print("[signal %d: aborting]" % num, flush=True)
+        STOP.set()
+    for sig in (signal.SIGINT, signal.SIGHUP, signal.SIGTERM):
+        signal.signal(sig, on_signal)
 
 
 class Robot:
@@ -129,7 +176,7 @@ class Player:
         self.corr_log = []
         self.until = until
         self.log = []
-        self.stop = threading.Event()
+        self.stop = STOP
         self.holding = False
 
     def wait_grip(self, timeout):
@@ -150,7 +197,7 @@ class Player:
 
     def check(self, i, seg, hold_upper, r0, p0):
         if self.stop.is_set():
-            raise Abort("stopped by user")
+            raise Abort("stopped (Ctrl-C / STOP / operator link lost)")
         if self.r.age() > C.STALE_S:
             raise Abort("no rt/lowstate for %.2f s" % self.r.age())
         r, p = self.r.tilt()
@@ -232,7 +279,9 @@ class Player:
                 time.sleep(max(0.0, next_t - time.time()))
             q_final = self.Q[end - 1]
             print("done%s" % (" (stopped after %s)" % self.until if self.until else ""), flush=True)
-        except Abort as e:
+        except Exception as e:  # noqa: BLE001 - Abort, or anything unexpected: always take the safe exit
+            if not isinstance(e, Abort):
+                e = Abort("internal error %s: %s" % (e.__class__.__name__, e))
             self.aborted = str(e)
             seg = seg_of[min(i, len(self.Q) - 1)]          # the segment being executed when it failed
             print("ABORT during %s: %s" % (seg, e), flush=True)
@@ -300,6 +349,8 @@ def main():
     ap.add_argument("--iface", default="eth0")
     ap.add_argument("--open-loop", action="store_true", help="disable the body-motion correction")
     args = ap.parse_args()
+    install_safety(os.path.join(os.path.dirname(os.path.abspath(args.trajectory)) if args.trajectory else HERE,
+                                "player.log"))
 
     robot = Robot(args.iface, args.dry)
     traj = json.load(open(args.trajectory)) if args.trajectory else None
@@ -319,8 +370,10 @@ def main():
           flush=True)
     if args.dry:
         return
+    if STOP.is_set():
+        print("REFUSED: stopped before moving")
+        sys.exit(1)
     player = Player(robot, traj, args.until, closed_loop=not args.open_loop)
-    signal.signal(signal.SIGINT, lambda *_: player.stop.set())
     aborted = player.run()
     log = os.path.splitext(args.trajectory)[0] + "_executed.json"
     json.dump({"aborted": aborted, "log": player.log, "corrections": player.corr_log}, open(log, "w"))
