@@ -110,14 +110,12 @@ Use it on the robot with `OKRA_WEIGHTS=okra_seg_s02_3way.pt` (see Guide/16).
   (in 2,898 frames) to 29 (in 27 frames). The video contains no real okra, so
   those 29 are false positives: a long green leaf, a patch of rug just under the size
   limit, and a sliver at the frame edge.
-- **Not yet tested on robot footage that contains real okra.** Do that first to
-  confirm real pods are kept.
+- Fine-tuned on real okra frames from the robot camera (see above); still one room and lighting.
 - The filter can only remove detections. If the model misses a pod, the filter can't
   bring it back. Pods lying close together can be merged into one mask and rejected
   on shape.
-- The model is the public base checkpoint. The earlier 13-image fine-tune performed
-  worse and is not included. The real fix is fine-tuning on ~100–150 labeled
-  frames from this camera, including "no okra" frames of the rug, legs and leaves.
+- The public base checkpoint (`okra_seg.pt`) finds 0 of 90 test pods on this camera; use the
+  fine-tuned models. More labelled frames (web UI answers → `okra_pick.sh dataset`) improve them.
 - The pixel-based size limits assume a 640×480 camera about 0.3–1 m from the plant.
   Use depth on the robot so the size check is in real centimetres.
 - Speed: ~8 FPS on a laptop CPU (i7-9750H) with the .pt model. Expect much faster

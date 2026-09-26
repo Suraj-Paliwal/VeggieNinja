@@ -12,17 +12,21 @@ okra_data/
 │   ├── depth_key.npz        depth_mm (uint16) of the last frame, aligned to colour
 │   ├── candidates.json      every candidate: conf median/max, seen %, filter-ok %, reject reasons,
 │   │                        pelvis xyz, spread, pod axis, length, in_reach, key/best mask polygons
-│   ├── robot_state.json     29 joint angles, IMU rpy, waist, camera intrinsics, pelvis<-camera 4x4
+│   ├── robot_state.json     29 joint angles, IMU rpy, waist, camera intrinsics, pelvis<-camera 4x4,
+│   │                        time = ROBOT clock (becomes perceived_at_robot in target/trajectory)
 │   ├── annotated.jpg        last frame, all candidates numbered (robot's view)
 │   ├── question.jpg         what the operator was shown (only if asked)
 │   ├── decision.json        policy, auto/ask, reasons for asking, operator answer, per-candidate labels
 │   │                        (okra / not_okra / unsure / okra_auto), missed, unsure, response time, target
 │   ├── target.json          chosen pod for the planner (only if confirmed and in reach)
 │   ├── trajectory.json      planned arm motion (okra_plan.py);  sim.mp4 = its MuJoCo video
-│   ├── trajectory_executed.json   what the arm player did (log, abort reason)
+│   ├── trajectory_executed.json   what the arm player did (log, abort reason);  player.log = its output
+│   ├── safety/<step>_<HHMMSS>.json   every safety gate result for this event (checks, full robot probe)
 │   └── outcome.json         operator's verdict: success / fail / partial, note, recording episode
 ├── datasets/hitl_vNNN/      YOLO-seg exports (images/, labels/, data.yaml, manifest.csv, README.md)
-└── to_annotate/             frames where the operator said "you missed an okra" -> label in CVAT
+├── to_annotate/             frames where the operator said "you missed an okra" -> label in CVAT
+└── safety/                  gate results without an event (<day>/) + robot_baseline.json (first measured
+                             mode_machine / motor error bits; delete it to re-measure)
 ```
 
 ## Labels and what they become in training

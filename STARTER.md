@@ -7,7 +7,11 @@ Standard procedure, in order. Everything here was done on this robot on 2026-09-
 
 - Robot on the **gantry** until it is balancing; rope **slack but attached** while it stands.
 - One person holds the **e-stop** whenever anything can move. Nobody within arm's reach of the robot.
-- Stop from the PC: web UI **STOP** / **Esc**, or `robot_agent/g1ctl stop` (zero velocity + cancel).
+- Stop from the PC: web UI **STOP** / **Esc** (also interrupts a running okra reach/pick over ssh), Ctrl-C in
+  the `okra_pick.sh reach/pick` terminal, or `robot_agent/g1ctl stop`. If the ssh link drops during a
+  reach/pick, the robot aborts on its own (back along the path, blend out) [16].
+- Every okra step runs a **live safety gate** first (robot measured at that moment); a FAIL means
+  the step did not run — read the FAIL lines, fix the cause, run it again [16].
 - Never send `zero` (limp) or `damp` to a robot that is standing on its own: it will fold.
 
 ## 1. Hardware and network
@@ -68,7 +72,7 @@ Notes:
 | step sideways / forward | `g1ctl left 20`, `right 10`, `forward 20`, `back 20` (≤ 40 cm per command) | `robot_mode.sh step 0.1 0 2.0` (vy vx dur) |
 | look (turn waist, then back) | `g1ctl head 0.15` (+ left) / `head -0.15` / `head 0 0.1` (down) | `g1_record/rec.sh head --yaw 0.15 --hold 3` |
 | gripper (Dex1, right) | `g1ctl gripper open` / `close` | `okra_pick/okra_pick.sh gripper open` |
-| stop | `g1ctl stop` / web STOP / Esc | new ssh + zero velocity (slow) |
+| stop | `g1ctl stop` / web STOP / Esc (both also interrupt the okra arm player) | Ctrl-C in the okra terminal; web STOP works without the agent |
 
 Body awareness: web pill **body Δ mm · feet ok** / `g1ctl status` → `body` (pelvis shift vs the feet since
 the last anchor; red **FOOT MOVED** if the feet disagree). It re-anchors after each step; `g1ctl anchor`
@@ -92,7 +96,20 @@ MP4s go to `~/Junction/recordings/` [04, 08].
 
 Web UI → **1 Look → 2 Is it okra? → 3 Plan → 4 Reach test / Pick → 5 Outcome** [11, 13].
 Pods must hang ~0.85–0.95 m above the floor, 35–50 cm in front, slightly to the robot's right.
-First real motion: *Reach test* (no grasp) with the robot on the gantry.
+
+```bash
+cd ~/Junction/okra_pick
+./okra_pick.sh deploy                 # after code changes; ends with a live safety check
+./okra_pick.sh safety                 # any time: PASS / WARN / FAIL per check (web: "Safety check")
+OKRA_WEIGHTS=okra_seg_s02_3way.pt ./okra_pick.sh go     # look + human check + plan + sim video
+./okra_pick.sh dry                    # robot-side checks, nothing moves
+./okra_pick.sh reach                  # first real motion: no grasp, from a TERMINAL (Ctrl-C ready)
+./okra_pick.sh pick                   # only after a good reach
+```
+The gate checks, live: link, robot interface, joint-state rate, FSM 200/500/501, tilt, knee load (robot
+standing on its feet, rope slack), battery, motor temperature/errors, nothing else commanding the arm,
+camera, disk, and that the look is < 5 min old **on the robot clock** with the waist unchanged. Full
+run-day checklist: Guide 16 §7. Before the first grasp: calibrate `TCP_XYZ` / `CLOSE_AXIS` [11].
 
 ## 8. Shut down
 
@@ -118,3 +135,6 @@ First real motion: *Reach test* (no grasp) with the robot on the gantry.
 | tips forward in locked stand | take up the rope, straighten it, then `start` only when < 3° |
 | camera viewer black | `g1_record/rec.sh release` (a recording or the okra pipeline holds the camera) |
 | robot did not step | speeds below ~0.1 m/s may be ignored; check FSM 200 and that the remote is not in control |
+| `SAFETY GATE: '<step>' not run` | a check FAILed: the line above names it (e.g. `arm_sdk_free`, `knee_load`, `event_age`); fix and rerun [16] |
+| `perception is N s old on the robot clock` | the look is too old or the waist moved: `look` again, then `plan` |
+| `battery unknown` WARN | no BMS message was received: read the battery on the robot/remote yourself |

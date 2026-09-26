@@ -7,7 +7,7 @@ the VM sends commands over one TCP connection with `g1ctl`. Details: [`../Guide/
 ./agent.sh deploy && ./agent.sh start     # once per robot boot (or after code changes: ./agent.sh restart)
 ./g1ctl status                            # instant state + balance check
 ./g1ctl watch                             # live state line
-./g1ctl stop                              # zero velocity + cancel whatever is running
+./g1ctl stop                              # interrupt the okra arm player (SIGINT = its safe abort), zero velocity, cancel the task
 ./g1ctl ai | damp | ready | start         # bring-up
 ./g1ctl left 20 | right 10 | forward 20 | back 20
 ./g1ctl head 0.15 | head -0.2 0.1 3 0.2   # waist yaw [pitch hold speed]
