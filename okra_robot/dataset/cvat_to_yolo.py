@@ -8,8 +8,11 @@ Pull polygon labels from CVAT (org Junction) and write a YOLO-segmentation datas
   (CVAT would otherwise carry them onto every later frame).
 - Removes duplicate polygons (same pod outlined twice: centres within 4 px), keeping the larger.
 - Frames without polygons are kept as negatives (no okra).
-- Validation split by TIME, not at random: frames are sorted by recording time, cut into 10 blocks,
-  blocks 3 and 8 (20 %) go to val. Neighbouring frames are near-copies, so a random split would leak.
+- Split by TIME, not at random: frames are sorted by recording time and cut into 10 blocks.
+  default:      blocks 3, 8 -> val (20 %), rest -> train
+  --three-way:  blocks 1, 6 -> TEST (never used for training or checkpoint choice), block 8 -> val,
+                rest -> train, minus BUFFER frames on each side of a test block (near-copies of test frames).
+  Neighbouring frames are near-copies, so a random split would leak.
 Reads CVAT_HOST / CVAT_TOKEN from ../.env.
 """
 
@@ -51,6 +54,8 @@ def main():
     ap.add_argument("--images", default=os.path.join(HERE, "s02_label", "images"))
     ap.add_argument("--out", default=os.path.join(HERE, "yolo_s02"))
     ap.add_argument("--org", default="Junction")
+    ap.add_argument("--three-way", action="store_true", help="train / val / held-out test")
+    ap.add_argument("--buffer", type=int, default=2, help="frames dropped next to each test block (three-way)")
     args = ap.parse_args()
 
     host, tok = env()
@@ -79,12 +84,29 @@ def main():
 
     order = sorted(range(len(frames)), key=lambda i: frame_time(frames[i]))
     blocks = np.array_split(order, 10)
-    val = set(int(i) for b in (blocks[3], blocks[8]) for i in b)
+    split_of = {}
+    if args.three_way:
+        for bi, b in enumerate(blocks):
+            for i in b:
+                split_of[int(i)] = "test" if bi in (1, 6) else "val" if bi == 8 else "train"
+        pos = {int(i): k for k, i in enumerate(order)}
+        test_pos = sorted(pos[i] for i, sp in split_of.items() if sp == "test")
+        for i, sp in list(split_of.items()):
+            if sp != "test" and any(abs(pos[i] - t) <= args.buffer for t in test_pos):
+                split_of[i] = "dropped"
+    else:
+        for bi, b in enumerate(blocks):
+            for i in b:
+                split_of[int(i)] = "val" if bi in (3, 8) else "train"
     if os.path.exists(args.out):
         shutil.rmtree(args.out)
-    counts = {"train": [0, 0, 0], "val": [0, 0, 0]}          # images, with okra, polygons
+    counts = {sp: [0, 0, 0] for sp in ("train", "val", "test")}   # images, with okra, polygons
+    dropped = 0
     for i, name in enumerate(frames):
-        split = "val" if i in val else "train"
+        split = split_of[i]
+        if split == "dropped":
+            dropped += 1
+            continue
         for sub in ("images", "labels"):
             os.makedirs(os.path.join(args.out, sub, split), exist_ok=True)
         shutil.copy2(os.path.join(args.images, name), os.path.join(args.out, "images", split, name))
@@ -96,9 +118,13 @@ def main():
         c[1] += bool(lines)
         c[2] += len(lines)
     with open(os.path.join(args.out, "data.yaml"), "w") as f:
-        f.write("path: %s\ntrain: images/train\nval: images/val\nnames:\n  0: okra\n" % os.path.abspath(args.out))
-    for sp, (n, pos, npoly) in counts.items():
-        print("%-5s %3d images (%d with okra, %d without), %d polygons" % (sp, n, pos, n - pos, npoly))
+        f.write("path: %s\ntrain: images/train\nval: images/val\n%snames:\n  0: okra\n" % (
+            os.path.abspath(args.out), "test: images/test\n" if args.three_way else ""))
+    for sp, (n, npos, npoly) in counts.items():
+        if n:
+            print("%-5s %3d images (%d with okra, %d without), %d polygons" % (sp, n, npos, n - npos, npoly))
+    if dropped:
+        print("dropped %d buffer frames next to the test blocks" % dropped)
     print("removed %d duplicate polygons; dataset: %s" % (dups, args.out))
 
 

@@ -1,0 +1,83 @@
+{
+ "test_images": 30,
+ "test_pods": 90,
+ "models": {
+  "base": "/home/ros2/Junction/okra_robot/models/okra_seg.pt",
+  "tuned": "models/okra_seg_s02_3way.pt"
+ },
+ "metrics": {
+  "base": {
+   "official": {
+    "mask_mAP50": 0.012650176832538931,
+    "mask_mAP50_95": 0.006578262682836898,
+    "box_mAP50": 0.012650176832538931,
+    "box_mAP50_95": 0.005899696470021853
+   },
+   "mask_AP50_own": 8.613264427217915e-05,
+   "precision@0.25": 0.0,
+   "recall@0.25": 0.0,
+   "tp@0.25": 0,
+   "fp@0.25": 6,
+   "fn@0.25": 90,
+   "full_old_filter": {
+    "recall": 0.0,
+    "precision": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 90,
+    "filter_rejections_conf_ge_0.25": {
+     "shape": 1,
+     "size": 4,
+     "colour": 1
+    }
+   },
+   "full_new_filter": {
+    "recall": 0.0,
+    "precision": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 90,
+    "filter_rejections_conf_ge_0.25": {
+     "shape": 1,
+     "size": 4,
+     "colour": 1
+    }
+   }
+  },
+  "tuned": {
+   "official": {
+    "mask_mAP50": 0.8318466228500038,
+    "mask_mAP50_95": 0.6232927386947295,
+    "box_mAP50": 0.8318466228500038,
+    "box_mAP50_95": 0.6787087262537713
+   },
+   "mask_AP50_own": 0.8122237276393847,
+   "precision@0.25": 1.0,
+   "recall@0.25": 0.7111111111111111,
+   "tp@0.25": 64,
+   "fp@0.25": 0,
+   "fn@0.25": 26,
+   "full_old_filter": {
+    "recall": 0.4666666666666667,
+    "precision": 1.0,
+    "tp": 42,
+    "fp": 0,
+    "fn": 48,
+    "filter_rejections_conf_ge_0.25": {
+     "colour": 21,
+     "shape": 1
+    }
+   },
+   "full_new_filter": {
+    "recall": 0.7,
+    "precision": 1.0,
+    "tp": 63,
+    "fp": 0,
+    "fn": 27,
+    "filter_rejections_conf_ge_0.25": {
+     "shape": 1
+    }
+   }
+  }
+ }
+}
