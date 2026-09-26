@@ -66,7 +66,8 @@ Every tick: tilt drift > 5°, lowstate stale > 0.4 s, tracking error > 0.30 rad,
 Closed loop (Guide 14): 25 Hz correction for body motion; abort if a foot moved or the body moved > 3 cm.
 Abort: before the pull → back along the executed path (gripper opened if it had closed);
 during the pull → open gripper, then back; after the pull → stop there, keep the pod, blend out.
-Ctrl-C = abort.
+Ctrl-C, web STOP (SIGINT via ssh + agent), SIGHUP/SIGTERM and a lost ssh terminal/pipe = abort: the robot
+finishes the safe exit on its own; any unexpected error takes the same exit. Output → `runs/<id>/player.log`.
 
 ## Offline tests (all pass, 2026-09-26)
 
@@ -76,6 +77,7 @@ Ctrl-C = abort.
 | planner, 3 in-zone pods | plans 13–16 s, margin ≥ 0.42 rad; 2 out-of-zone refused |
 | plan checked with independent FK | TCP at pod to 1 mm, approach straight to 0.1 mm, ends at start |
 | `tests/test_player_sim.py` (fake robot) | nominal, empty grasp, stuck pod, tilt in approach, tilt in retreat, stale state: 6/6 |
+| `tests/test_link_loss.py` (fake robot) | ssh -T pipe closed, SIGHUP, ssh -t pty closed, SIGINT mid-approach → safe exit: 4/4 |
 | `tests/test_perceive_math.py` | pelvis→pixel→pelvis exact; vertical pod axis within 0.7° |
 
 ## Calibration before the first real grasp (marked CALIBRATE in pick_config.py)

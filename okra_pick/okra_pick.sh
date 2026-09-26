@@ -113,7 +113,7 @@ case "$cmd" in
     rc=$?
     set -e
     sleep 1; "$J/g1_record/rec.sh" stop | tail -1
-    scp -q "$host:$rdir/runs/$r/trajectory_executed.json" "$d/" 2>/dev/null || true
+    scp -q "$host:$rdir/runs/$r/"{trajectory_executed.json,player.log} "$d/" 2>/dev/null || true
     echo "player exit code $rc; video: g1_record/rec.sh pull, episode okra_${cmd}_$r"
     [ "$cmd" = pick ] && [ -z "$OKRA_NONINTERACTIVE" ] && "$PY_VM" "$HITL/outcome.py" "$d" --episode "okra_${cmd}_$r" || true
     exit $rc
