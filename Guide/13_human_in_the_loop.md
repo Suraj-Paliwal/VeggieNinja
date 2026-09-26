@@ -27,6 +27,8 @@ Add `&operator=NAME` to the URL (or type it once when asked): the name is stored
 Server: `okra_pick/web/server.py` (standard library; talks to robot_agent over TCP, runs okra_pick.sh steps as
 background jobs, serves okra_data files). Listens on localhost only unless given `--host` **and** `--token`.
 Only the listed robot commands are forwarded (no zero-torque from the web).
+**STOP** interrupts a running reach/pick directly over ssh (`pkill -INT arm_player`) and via the agent, so it
+works without the agent; if the ssh link drops, the player aborts safely on its own (16).
 
 Tested 2026-09-27 against the simulated agent: state 4 Hz, step through the web, `zero` refused, pending
 question shown with clickable candidates, answer "1" → target, plan job → 16.3 s plan + sim video, outcome

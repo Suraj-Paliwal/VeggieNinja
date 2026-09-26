@@ -66,7 +66,7 @@ A detection counts as okra only if it passes all four:
 |-----------|----------------------------------------------------------------|--------------------|
 | size      | 0.05–8 % of the frame, or 5–25 cm long when depth is given     | rug, big blobs     |
 | shape     | long/short side ratio 2–7                                      | stools; poles      |
-| colour    | ≥ 50 % of mask pixels okra-green (HSV hue 30–90)               | trousers, stools   |
+| colour    | ≥ 50 % of mask pixels okra-green (HSV hue 30–105)              | trousers, stools   |
 | stability | seen near the same spot in 3 of the last 5 frames (streams)    | one-frame flickers |
 
 All thresholds are constants at the top of `okra_filter.py`.
@@ -88,6 +88,20 @@ The filter's green hue range was widened to 30–105 (see `okra_filter.py`): wit
 threw away 44 % of the real pods (full-detector recall 0.38). The okra pipeline uses `okra_seg_s02.pt`
 (`OKRA_WEIGHTS` overrides). All frames come from ONE session/room: expect lower numbers elsewhere —
 every human answer in the web UI adds new training data (`okra_pick.sh dataset`).
+
+## Held-out test: `models/okra_seg_s02_3way.pt` (2026-09-27)
+
+`dataset/yolo_s02_3way` = 97 train / 15 val / 30 test images (90 test pods, never used for training or
+checkpoint choice). `evaluate_test.py` compares base vs fine-tuned on the test split only
+(run it with `../dimos/.venv/bin/python`, which has ultralytics + matplotlib) → `report/REPORT.md` + plots.
+
+| test split | okra_seg.pt | okra_seg_s02_3way.pt |
+|---|---|---|
+| mask mAP50 / mAP50-95 | 0.013 / 0.007 | **0.832 / 0.623** |
+| precision / recall @ conf 0.25 | 0.00 / 0.00 | **1.00 / 0.71** |
+| full detector recall / precision (hue 30–90 → 30–105) | 0 / – | 0.47 → **0.70** / 1.00 |
+
+Use it on the robot with `OKRA_WEIGHTS=okra_seg_s02_3way.pt` (see Guide/16).
 
 ## Current status / limits (read before relying on it)
 

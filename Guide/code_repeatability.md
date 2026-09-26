@@ -23,6 +23,7 @@ Every report in this folder is at most 150 lines. Verified on 2026-09-26.
 | 13 | [13_human_in_the_loop.md](13_human_in_the_loop.md) | Operator web UI; robot asks when unsure; answers become training data; okra_data/ |
 | 14 | [14_spatial_awareness_closed_loop.md](14_spatial_awareness_closed_loop.md) | Body pose from legs + IMU; closed-loop reach that follows body motion |
 | 15 | [15_vm_tuning.md](15_vm_tuning.md) | VM disk resize, VirtualBox settings (GUI), green turtle / Hyper-V fix |
+| 16 | [16_robot_run_checklist.md](16_robot_run_checklist.md) | Run day: what runs where, VM limits, STOP layers, link loss, known issues, checklist |
 
 ## System at a glance
 
@@ -75,7 +76,7 @@ Preview: 498 of 503 frames arrived on the VM.
 | unitree_sdk2py (robot) | copied from `~/unitree_sdk2_python` | local source copy |
 | ffmpeg (robot) | apt | 4.2.7-0ubuntu0.1 |
 | Python (VM) | `g1_video/.venv` | 3.10, cyclonedds 0.10.2 |
-| Robot clock | Orin | ~11.5 min behind the VM (irrelevant: one clock per episode) |
+| Robot clock | Orin | ~11.5 min behind the VM (fine for episodes; breaks the okra plan-age check, see 16) |
 
 ## Files added in this work
 

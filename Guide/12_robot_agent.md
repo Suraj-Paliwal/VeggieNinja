@@ -28,7 +28,7 @@ VM                                   robot Orin (192.168.123.164)
 | Command | Does | Gate |
 |---|---|---|
 | `status`, `watch [HZ]`, `ping` | state: FSM, mode, tilt, knee load, gripper, lowstate Hz, busy, balance check | — |
-| `stop` | zero velocity ×3 + cancel the running task | always accepted, also while busy |
+| `stop` | SIGINT to a running okra `arm_player.py` (its clean abort) + zero velocity ×3 + cancel the running task | always accepted, also while busy (16) |
 | `ai` | MotionSwitcher SelectMode("ai") (after a reboot) | — |
 | `damp` / `ready` / `start` | FSM 1 / 4 / 200 | `start`: upright < 3° and knees > 15 Nm; tilt watched 5 s |
 | `zero --confirm` | FSM 0 (limp) | needs `--confirm` |
