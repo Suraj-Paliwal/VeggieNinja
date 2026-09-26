@@ -334,9 +334,13 @@ def preflight(robot, traj):
             wd = np.abs(robot.q(C.WAIST_IDX) - np.array(tq[12:15])).max()
             if wd > C.MAX_WAIST_DIFF:
                 return "waist moved %.2f rad since perception (max %.2f): look again" % (wd, C.MAX_WAIST_DIFF)
-        age = time.time() - traj.get("planned_at", 0)
-        if age > 300:
-            return "plan is %.0f s old (max 300)" % age
+        # age since perception, on THIS robot's clock only (the VM clock is never compared with it)
+        t_perc = traj.get("perceived_at_robot")
+        if t_perc is None:
+            return "plan has no robot-clock perception time (re-plan from a new look)"
+        age = time.time() - t_perc
+        if not 0 <= age <= C.MAX_EVENT_AGE_S:
+            return "perception is %.0f s old on the robot clock (allowed 0..%.0f): look again" % (age, C.MAX_EVENT_AGE_S)
     return None
 
 
@@ -346,9 +350,14 @@ def main():
     ap.add_argument("--dry", action="store_true", help="run every check, send nothing")
     ap.add_argument("--until", choices=["to_pregrasp", "approach"], help="stop after this segment and go back")
     ap.add_argument("--gripper", choices=["open", "close"])
-    ap.add_argument("--iface", default="eth0")
+    ap.add_argument("--iface", default="auto", help="auto = interface of the route to the motion controller")
     ap.add_argument("--open-loop", action="store_true", help="disable the body-motion correction")
     args = ap.parse_args()
+    if args.iface == "auto":
+        from safety_probe import detect_iface       # measured, not assumed
+        args.iface = detect_iface()
+        if not args.iface:
+            sys.exit("no network route to the motion controller: is the robot on and cabled?")
     install_safety(os.path.join(os.path.dirname(os.path.abspath(args.trajectory)) if args.trajectory else HERE,
                                 "player.log"))
 

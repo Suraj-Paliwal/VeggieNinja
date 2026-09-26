@@ -1,0 +1,2 @@
+event_id,date,n_candidates,top_conf,policy,asked,reasons,answer,n_okra,n_not_okra,missed,unsure,operator,response_s,target_in_reach,planned,executed,outcome,detector
+example_synthetic,0000-examples,0,,,,,,0,0,,,,,False,True,False,,

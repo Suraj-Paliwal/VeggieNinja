@@ -35,6 +35,7 @@ okra_robot/models/*.onnx
 
 # human-in-the-loop data (README.md and index.csv stay tracked)
 okra_data/events/
+okra_data/safety/
 okra_data/datasets/
 okra_data/to_annotate/
 

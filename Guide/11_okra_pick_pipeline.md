@@ -68,6 +68,8 @@ Abort: before the pull → back along the executed path (gripper opened if it ha
 during the pull → open gripper, then back; after the pull → stop there, keep the pod, blend out.
 Ctrl-C, web STOP (SIGINT via ssh + agent), SIGHUP/SIGTERM and a lost ssh terminal/pipe = abort: the robot
 finishes the safe exit on its own; any unexpected error takes the same exit. Output → `runs/<id>/player.log`.
+Every step is gated by a live safety check measured on the robot (clock, iface, FSM, battery, arm_sdk
+publishers, ...); the plan age is checked on the robot clock only (`perceived_at_robot`). See 16 §4.
 
 ## Offline tests (all pass, 2026-09-26)
 

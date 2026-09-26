@@ -16,6 +16,11 @@
 #   ./okra_pick.sh outcome [EVENT]      record whether the pick worked (asked automatically after 'pick')
 #   ./okra_pick.sh dataset              export human-confirmed events as a YOLO training set
 #   ./okra_pick.sh web [--host 0.0.0.0 --token T]   operator web interface on http://localhost:8080
+#   ./okra_pick.sh safety [STEP] [EVENT]  run the live safety gate by hand (robot probe + VM + event checks)
+#
+# Every robot step first runs the safety gate (safety/safety_check.py, Guide 16): the robot is measured live
+# (clock, interface, FSM, tilt, battery, temperatures, who commands the arm...) and a FAIL stops the step.
+# Motion steps run it again right after you confirm. OKRA_SAFETY_ACCEPT=check1,.. downgrades named FAILs.
 #
 # REAL steps ask for confirmation (type the word shown); --yes skips it (only after a human confirmed).
 set -e
@@ -38,39 +43,58 @@ HITL="$here/hitl"
 rundir() {  # event folder in okra_data (latest, or by id)
   local d; d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.find(${1:+'$1'}) or '')")
   [ -n "$d" ] && [ -d "$d" ] || { echo "no event ${1:-found}" >&2; exit 1; }; echo "$d"; }
+IFACE=""
+gate() {  # STEP [EVENT_DIR] [TRAJ]: live safety gate; exits on FAIL; sets IFACE (robot interface, measured)
+  local out rc; set +e
+  out=$("$PY_VM" "$here/safety/safety_check.py" "$1" ${2:+--event "$2"} ${3:+--traj "$3"}); rc=$?; set -e
+  echo "$out" | grep -v '^IFACE='
+  IFACE=$(echo "$out" | sed -n 's/^IFACE=//p')
+  [ $rc = 0 ] && [ -n "$IFACE" ] || { echo "SAFETY GATE: '$1' not run (see above)"; exit 3; }
+}
 free_camera() { run "/unitree/sbin/mscli getservice video_hub_pc4 | grep -q 'status:0' && /unitree/sbin/mscli stopservice video_hub_pc4 >/dev/null; true"; }
 
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   deploy)
     run "mkdir -p $rdir/robot $rdir/okra_robot/models $rdir/runs $rdir/events"
-    scp -q "$here"/robot/{okra_perceive.py,candidates.py,arm_player.py,pick_config.py,g1_chain.py,g1.urdf,body_pose.py,closed_loop.py} "$host:$rdir/robot/"
+    scp -q "$here"/robot/{okra_perceive.py,candidates.py,arm_player.py,pick_config.py,g1_chain.py,g1.urdf,body_pose.py,closed_loop.py,safety_probe.py} "$host:$rdir/robot/"
     scp -q "$J"/okra_robot/{okra_detector.py,okra_filter.py} "$host:$rdir/okra_robot/"
     rsync -a "$J"/okra_robot/models/ "$host:$rdir/okra_robot/models/"
     run "cd $rdir/robot && $PY_DET -c 'import pyrealsense2, torch, ultralytics, okra_perceive; print(\"perceive env ok, cuda\", torch.cuda.is_available())' 2>&1 | tail -1;
          $PY_ARM -c 'import arm_player; print(\"player env ok\")'"
+    gate status
+    ;;
+  safety)
+    st="${1:-status}"; ev=""; tr=""
+    if [ -n "$2" ] || [[ " plan dry reach pick " == *" $st "* ]]; then ev=$(rundir "$2"); [ -f "$ev/trajectory.json" ] && tr="$ev/trajectory.json"; fi
+    gate "$st" "$ev" "$tr"
     ;;
   gripper)
     [ "$1" = open ] || [ "$1" = close ] || { echo "usage: gripper open|close"; exit 2; }
+    gate gripper
     confirm gripper
-    run "cd $rdir/robot && $PY_ARM arm_player.py --gripper $1"
+    gate gripper
+    run "cd $rdir/robot && $PY_ARM arm_player.py --gripper $1 --iface $IFACE"
     ;;
   floor)
+    gate floor
     free_camera
-    run "cd $rdir/robot && $PY_DET okra_perceive.py --floor-check 2>&1 | grep -v -i warning"
+    run "cd $rdir/robot && $PY_DET okra_perceive.py --floor-check --iface $IFACE 2>&1 | grep -v -i warning"
     ;;
   perceive)
+    gate look
     d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())"); r=$(basename "$d")
     free_camera
-    run "cd $rdir/robot && $PY_DET okra_perceive.py --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
+    run "cd $rdir/robot && $PY_DET okra_perceive.py --iface $IFACE --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
     rsync -a "$host:$rdir/events/$r/" "$d/" || { echo "no event bundle (see above)"; exit 1; }
     echo "event $r -> $d"
     "$PY_VM" "$HITL/confirm.py" "$d" "$@"
     ;;
   look)   # perceive only (the web interface asks the question itself); prints EVENT_DIR=<path>
+    gate look
     d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())"); r=$(basename "$d")
     free_camera
-    run "cd $rdir/robot && $PY_DET okra_perceive.py --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
+    run "cd $rdir/robot && $PY_DET okra_perceive.py --iface $IFACE --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
     rsync -a "$host:$rdir/events/$r/" "$d/" || { echo "no event bundle (see above)"; exit 1; }
     echo "EVENT_DIR=$d"
     ;;
@@ -91,6 +115,7 @@ case "$cmd" in
   plan)
     d=$(rundir "$1")
     [ -f "$d/target.json" ] || { echo "no confirmed target in $(basename "$d") (perceive / confirm first)"; exit 1; }
+    gate plan "$d"
     "$PY_VM" "$here/plan/okra_plan.py" "$d/target.json" -o "$d/trajectory.json"
     MUJOCO_GL=glfw "$PY_VM" "$here/plan/sim_view.py" "$d/trajectory.json" --video "$d/sim.mp4" || echo "(sim video failed; plan is still valid)"
     ;;
@@ -100,16 +125,18 @@ case "$cmd" in
   dry|reach|pick)
     d=$(rundir "$1"); r=$(basename "$d")
     [ -f "$d/trajectory.json" ] || { echo "plan first: ./okra_pick.sh plan $r"; exit 1; }
+    gate "$cmd" "$d" "$d/trajectory.json"
     run "mkdir -p $rdir/runs/$r"; scp -q "$d/trajectory.json" "$host:$rdir/runs/$r/"
     if [ "$cmd" = dry ]; then
-      run "cd $rdir/robot && $PY_ARM arm_player.py ~/$rdir/runs/$r/trajectory.json --dry"; exit
+      run "cd $rdir/robot && $PY_ARM arm_player.py ~/$rdir/runs/$r/trajectory.json --dry --iface $IFACE"; exit
     fi
     confirm "$cmd"
+    [ $yes_flag = 1 ] || gate "$cmd" "$d" "$d/trajectory.json"     # again: time passed at the prompt
     extra=""; [ "$cmd" = reach ] && extra="--until approach"
     "$J/g1_record/rec.sh" start "okra_${cmd}_$r" >/dev/null && echo "recording started"
     set +e
     tflag=-t; [ -n "$OKRA_NONINTERACTIVE" ] && tflag=-T
-    ssh $tflag -o ConnectTimeout=5 "$host" "cd $rdir/robot && $PY_ARM arm_player.py ~/$rdir/runs/$r/trajectory.json $extra"
+    ssh $tflag -o ConnectTimeout=5 "$host" "cd $rdir/robot && $PY_ARM arm_player.py ~/$rdir/runs/$r/trajectory.json --iface $IFACE $extra"
     rc=$?
     set -e
     sleep 1; "$J/g1_record/rec.sh" stop | tail -1

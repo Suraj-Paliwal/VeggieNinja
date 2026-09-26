@@ -299,6 +299,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("event not found")
             app.event = ev
             return {"ok": True}
+        if path == "/api/safety":   # live safety gate (robot probe); also runs automatically before every step
+            step = b.get("step") or "status"
+            if step not in ("status", "gripper", "floor", "look", "plan", "dry", "reach", "pick"):
+                raise ValueError("unknown step: %s" % step)
+            args = [sh, "safety", step] + ([os.path.basename(ev)] if ev and step in ("plan", "dry", "reach", "pick") else [])
+            app.jobs.start("safety " + step, args)
+            return {"ok": True}
         if path == "/api/record":
             act = b.get("action")
             if act == "start":

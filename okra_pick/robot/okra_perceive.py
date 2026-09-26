@@ -168,10 +168,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--event-dir", default="event")
     ap.add_argument("--frames", type=int, default=15)
-    ap.add_argument("--iface", default="eth0")
+    ap.add_argument("--iface", default="auto", help="auto = interface of the route to the motion controller")
     ap.add_argument("--weights", default=None)
     ap.add_argument("--floor-check", action="store_true")
     args = ap.parse_args()
+    if args.iface == "auto":
+        from safety_probe import detect_iface       # measured, not assumed
+        args.iface = detect_iface()
+        if not args.iface:
+            sys.exit("no network route to the motion controller: is the robot on and cabled?")
 
     chain = Chain(os.path.join(HERE, "g1.urdf"))
     ls = LowState(args.iface)

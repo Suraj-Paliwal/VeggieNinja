@@ -1,4 +1,4 @@
-# 16 — Robot run day: what runs where, VM limits, safety, checklist
+# 16 — Robot run day: what runs where, VM limits, safety gate, checklist
 
 Written 2026-09-27 before the first real okra reach/pick. Read with 11 (pipeline), 13 (web UI), 15 (VM).
 
@@ -44,23 +44,51 @@ Until 2026-09-27 web STOP only reached the agent (zero velocity) and **did not s
 Everything the player prints also goes to `~/okra_pick/runs/<id>/player.log` (copied back into the event
 folder after the run). Test: `tests/test_link_loss.py <trajectory.json>` → 4/4 PASS (VM, fake robot).
 
-## 4. Known issues (not fixed)
+## 4. Safety gate before every step (nothing about the robot is assumed)
 
-- **Clock skew:** preflight refuses a plan older than 300 s, but compares `planned_at` (VM clock) with
-  the Orin clock, which is ~11.5 min behind (code_repeatability.md). The check is then effectively off
-  (plans up to ~16 min pass); if the Orin were ahead it would refuse every plan.
-  Check: `date +%s; ssh unitree@192.168.123.164 date +%s`. Workaround: plan right before reach/pick.
+`okra_pick.sh` runs `safety/safety_check.py STEP` before gripper, floor, look/perceive, plan, dry, reach and
+pick — reach/pick/gripper **again right after you type the confirmation word**. It runs
+`robot/safety_probe.py` on the Orin (read-only, ~2 s) and measures everything live: robot clock, network
+interface (route to the motion controller → passed as `--iface`, no fixed `eth0`), lowstate rate and gaps,
+FSM + switcher mode, tilt, knee load, per-motor temperature/error bits, Dex1 state, **who is already publishing
+`rt/arm_sdk` / `rt/dex1/right/cmd`**, motion programs running, battery (BMS if it answers, else "unknown"),
+RealSense on USB, disk and Orin temperature. FAIL = the step does not run (exit 3).
+
+| Check | look/floor | plan | gripper | dry/reach/pick |
+|---|---|---|---|---|
+| ssh link, SDK imports, interface route, lowstate ≥ 100 Hz and gap ≤ 0.4 s | FAIL | FAIL | FAIL | FAIL |
+| camera on USB | FAIL | – | – | – |
+| perception age ≤ 300 s **on the robot clock**, waist unchanged since perception | – | FAIL | – | FAIL |
+| nobody else on arm_sdk / gripper cmd, no motion program, Dex1 state alive | – | – | FAIL | FAIL |
+| FSM in 200/500/501, knee load ≥ 15 Nm, tilt ≤ 3°, right-arm error bits, battery ≥ 30 % | warn | warn | warn | FAIL |
+| arm within 0.15 rad of the plan's start pose | – | – | – | FAIL |
+| mode_machine = first value measured on this robot (`okra_data/safety/robot_baseline.json`) | warn | warn | warn | FAIL |
+| battery unknown, motor ≥ 70 °C, Orin ≥ 85 °C, VM busy, recorder already running | warn | warn | warn | warn |
+
+- Limits (policy) live in `safety/safety_limits.py` / `robot/pick_config.py`; unverified ones only warn.
+- Every result is saved: `<event>/safety/<step>_<time>.json` (or `okra_data/safety/<day>/`).
+- By hand: `./okra_pick.sh safety [STEP] [EVENT]`; web: **Safety check** / **Safety: reach** buttons.
+- One-run override for a named FAIL (logged): `OKRA_SAFETY_ACCEPT=battery ./okra_pick.sh reach`.
+- Player preflight (on the robot, at start) repeats FSM, tilt, lowstate, start pose, waist and the
+  perception age — also on the robot clock (`perceived_at_robot` travels robot_state → target → trajectory).
+  A plan without it (synthetic) is refused. During the move the player monitors every tick (11, 14).
+- Tests: `tests/test_safety.py` → 26/26 (21 gate cases, 1 operator-accept case, 4 player-age cases).
+- Fixed by this: the old plan-age check compared the VM clock with the Orin clock (~11.5 min behind),
+  which silently disabled it.
+
+## 5. Known issues (still open)
+
 - **Agent not deployed yet** (12): web STOP still works via ssh; voice/LED prompts do nothing.
-- **Waist/head vs pick:** agent `head` and `arm_player` both write `rt/arm_sdk` — never use
-  look/head buttons while reach/pick runs.
-- **SDK import is lazy:** `deploy` passes even if `unitree_sdk2py` is missing. The first real check is
-  `dry` (player env) and the first `look` (perceive env).
+- **Waist/head during a pick**: the gate refuses to start if anything publishes `rt/arm_sdk`, but does
+  not stop a waist command sent after the start — don't use look/head while reach/pick runs.
 - **Recording can fail silently** in reach/pick: watch for the line `recording started`.
-- **Uncalibrated:** `TCP_XYZ`, `CLOSE_AXIS = "y"`, `GRIP_EMPTY_Q` in `robot/pick_config.py`. Wrong
+- **Uncalibrated:** `TCP_XYZ`, `CLOSE_AXIS = "y"`, `GRIP_EMPTY_Q` (`robot/pick_config.py`). Wrong
   `CLOSE_AXIS` = jaws 90° off, and the 45° pull twist is about the same axis.
-- **VM disk** 87 % full (15): recordings / rsync / sim.mp4 fail when it fills. Keep ≥ 15 GB free.
+- **Gantry with feet off the floor** fails `knee_load` for reach/pick (the robot is not balancing then).
+- `tests/test_hitl.py` case 1 fails (older issue, labelling only): the out-of-reach second candidate no
+  longer appears in the question.
 
-## 5. Detector choice
+## 6. Detector choice
 
 | Model | Held-out numbers | Note |
 |---|---|---|
@@ -70,12 +98,12 @@ folder after the run). Test: `tests/test_link_loss.py <trajectory.json>` → 4/4
 Use the 3-way model: `OKRA_WEIGHTS=okra_seg_s02_3way.pt ./okra_pick.sh look`. Misses are mostly small,
 far or edge-cut pods; the base checkpoint finds 0 of 90 test pods.
 
-## 6. Checklist (in order)
+## 7. Checklist (in order)
 
 VM
 1. `df -h /` ≥ 15 GB free (`uv cache prune`, 15). No green turtle, laptop on charger.
 2. `~/Junction/g1_connect/check.sh` → `RESULT: ALL OK` (robot powered).
-3. `date +%s; ssh unitree@192.168.123.164 date +%s` → note the skew (§4).
+3. After bring-up (step 4): `okra_pick/okra_pick.sh safety status` → no FAIL (§4).
 
 Robot bring-up (gantry, e-stop in hand)
 4. `g1_connect/robot_mode.sh ai` (after a reboot) → `damp` → `ready` → `start` (FSM 200).
@@ -96,7 +124,7 @@ Okra (pod 0.85–0.95 m high, 0.35–0.50 m in front, 0–0.2 m to the right; 11
 13. Only if reach looked right: `./okra_pick.sh pick` → `outcome` is asked afterwards.
 Keep the VM idle during 12–13 (no training, no heavy jobs, no sleep).
 
-## 7. Files changed for this (2026-09-27)
+## 8. Files changed for this (2026-09-27)
 
 ```
 okra_pick/robot/arm_player.py   SafeOut + SIGHUP/SIGTERM/SIGINT abort, any error → safe exit, player.log
@@ -105,4 +133,10 @@ robot_agent/agent.py            stop also SIGINTs arm_player (interrupt_arm_play
 okra_pick/okra_pick.sh          copies player.log back after reach/pick
 okra_pick/tests/test_link_loss.py   link-loss tests (4 cases)
 okra_robot/evaluate_test.py, okra_robot/report/   base vs fine-tuned on the test split
+okra_pick/robot/safety_probe.py     live read-only robot probe (Orin)
+okra_pick/safety/safety_check.py, safety_limits.py   the gate + policy limits (VM)
+okra_pick/okra_pick.sh              gate before every step, measured --iface, `safety` command
+okra_pick/hitl/confirm.py, plan/okra_plan.py   carry perceived_at_robot (robot clock) into the plan
+okra_pick/web/server.py, index.html  /api/safety + Safety buttons
+okra_pick/tests/test_safety.py      gate + player-age tests
 ```

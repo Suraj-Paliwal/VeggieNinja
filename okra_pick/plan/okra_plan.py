@@ -179,6 +179,7 @@ def plan(target):
         raise PlanError("no feasible grasp:\n  " + "\n  ".join(notes[-6:]))
     _, traj, pitch, flip = best
     traj.update(approach_pitch_deg=pitch, close_axis_flipped=flip, target=target,
+                perceived_at_robot=target.get("perceived_at_robot"),      # robot clock: the player checks the age with it
                 pod_xyz=p.tolist(), approach_dir=approach_dir(p, shoulder, pitch).tolist())
     return traj
 
@@ -260,7 +261,7 @@ def build_one(arm, R, poses, twist):
             "config": {k: getattr(C, k) for k in ("TCP_XYZ", "CLOSE_AXIS", "PREGRASP_BACK", "GRASP_DEPTH",
                                                     "PULL_BACK", "PULL_DOWN", "APPROACH_SPEED", "PULL_SPEED",
                                                     "PULL_TWIST_DEG", "TWIST_FRAC", "TWIST_SPEED_DEG")},
-            "planned_at": time.time()}
+            "planned_at": time.time()}                                  # VM clock, information only
 
 
 def synthetic_target(x, y, z):

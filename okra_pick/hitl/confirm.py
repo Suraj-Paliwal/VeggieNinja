@@ -105,7 +105,8 @@ def make_target(ev, c):
     st = store.load(ev, "robot_state.json")
     return {"xyz_pelvis": c["xyz_pelvis"], "axis_pelvis": c["axis_pelvis"], "length_m": c["length_m"],
             "spread_m": c["spread_m"], "conf": c["conf_median"], "candidate_id": c["id"], "q": st["q"],
-            "source": "hitl", "time": time.time()}
+            "source": "hitl", "time": time.time(),
+            "perceived_at_robot": st.get("time")}          # ROBOT clock (robot_state.json is written on the Orin)
 
 
 def prepare(ev, mode=None):

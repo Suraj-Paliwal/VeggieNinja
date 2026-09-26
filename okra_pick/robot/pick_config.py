@@ -60,4 +60,5 @@ MAX_PULL_TAU = 12.0                      # Nm on any right-arm joint during the 
 MAX_CORRECTION = 0.03                    # m: body moved more than this since perception -> abort, look again
 CORRECT_HZ = 25.0                        # how often the closed-loop correction is recomputed
 MAX_WAIST_DIFF = 0.05                    # rad: waist now vs at perception (the plan assumes the same waist)
+MAX_EVENT_AGE_S = 300.0                  # s since perception, robot clock only (safety gate + player preflight)
 STALE_S = 0.4                            # s without rt/lowstate aborts (on the robot: ~1 kHz, gaps up to ~0.18 s seen)

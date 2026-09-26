@@ -85,6 +85,7 @@
       <h2>Robot</h2>
       <div class="row"><button onclick="agent('start')">Start agent</button><button onclick="agent('restart')">Restart agent</button>
         <button title="take the current stance as the reference for the body pose" onclick="robot('anchor')">Re-anchor body</button></div>
+      <div class="row"><button title="measure the robot now and run the safety gate (runs automatically before every step)" onclick="post('/api/safety',{step:'status'})">Safety check</button><button title="safety gate for reach/pick on the current event" onclick="post('/api/safety',{step:'reach'})">Safety: reach</button></div>
       <h3>Bring-up</h3>
       <div class="row">
         <button onclick="robotConfirm('ai','Switch the robot to AI mode (after a reboot)?')">AI mode</button>
