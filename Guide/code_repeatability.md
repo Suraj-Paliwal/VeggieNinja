@@ -17,6 +17,7 @@ Every report in this folder is at most 150 lines. Verified on 2026-09-26.
 | 08 | [08_data_format.md](08_data_format.md) | Episode folder layout, loading, aligning streams |
 | 09 | [09_troubleshooting.md](09_troubleshooting.md) | Every failure hit so far and its fix |
 | 10 | [10_bringup_and_motion.md](10_bringup_and_motion.md) | FSM bring-up, balance conditions, waist moves |
+| 11 | [11_okra_pick_pipeline.md](11_okra_pick_pipeline.md) | Okra detection → IK plan → on-robot grasp, sim, tests |
 
 ## System at a glance
 

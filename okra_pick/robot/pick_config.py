@@ -54,4 +54,4 @@ MAX_TILT = 0.05                          # rad (~3 deg) to start
 ABORT_TILT_DRIFT = 0.08                  # rad (~5 deg) tilt change aborts
 MAX_TRACK_ERR = 0.30                     # rad commanded-vs-measured on any right-arm joint aborts
 MAX_PULL_TAU = 12.0                      # Nm on any right-arm joint during the pull aborts (release + retreat)
-STALE_S = 0.2                            # s without rt/lowstate aborts (player runs on the robot: ~1 kHz)
+STALE_S = 0.4                            # s without rt/lowstate aborts (on the robot: ~1 kHz, gaps up to ~0.18 s seen)

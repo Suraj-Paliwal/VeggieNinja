@@ -136,7 +136,7 @@ def approach_dir(p, shoulder, pitch_deg):
 
 
 def cosine_joint(q0, q1, speed):
-    T = max(1.5, float(np.max(np.abs(q1 - q0))) / speed)
+    T = max(1.5, float(np.max(np.abs(q1 - q0))) * np.pi / 2 / speed)   # cosine peak speed = speed
     n = max(2, int(round(T / C.DT)))
     s = (1 - np.cos(np.linspace(0, np.pi, n))) / 2
     return q0 + s[:, None] * (q1 - q0)
