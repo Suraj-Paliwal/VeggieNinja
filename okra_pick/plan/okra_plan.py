@@ -10,8 +10,9 @@ q (29 measured joint angles, rt/lowstate order).
 
 Grasp: approach horizontally (or tilted, see APPROACH_PITCHES_DEG) from the right shoulder towards the pod,
 jaws closing ACROSS the pod. Segments:
-  to_pregrasp (joint space) -> approach (straight line) -> [close gripper] -> pull (straight back/down)
-  -> retreat (straight) -> home (joint space back to the start pose). The gripper stays closed at the end.
+  to_pregrasp (joint space) -> approach (straight line) -> [close gripper] -> pull (back/down with a wrist
+  twist about the gripper axis in its first part: PULL_TWIST_DEG, TWIST_FRAC) -> retreat (straight, twist
+  kept) -> home (joint space back to the start pose). The gripper stays closed at the end.
 
 Refuses (exit 2) if the pod is outside REACH_*, any waypoint has no IK within tolerance, a joint limit
 margin is violated, or the hand passes through the torso box. Writes nothing in that case.
@@ -186,11 +187,22 @@ class PlanError(Exception):
     pass
 
 
-def cartesian(arm, q0, R, p0, p1, speed, name):
-    n = max(2, int(np.ceil(np.linalg.norm(p1 - p0) / speed / C.DT)) + 1)
+def rot_x(deg):
+    t = np.radians(deg)
+    return np.array([[1, 0, 0], [0, np.cos(t), -np.sin(t)], [0, np.sin(t), np.cos(t)]])
+
+
+def cartesian(arm, q0, R, p0, p1, speed, name, twist_deg=0.0, twist_frac=1.0):
+    """Straight line p0 -> p1; optionally twist the tool about its own x axis (the gripper axis) by
+    twist_deg during the first twist_frac of the line (tool frame: R @ rot_x)."""
+    T = np.linalg.norm(p1 - p0) / speed
+    if twist_deg:
+        T = max(T, abs(twist_deg) / C.TWIST_SPEED_DEG / twist_frac)
+    n = max(2, int(np.ceil(T / C.DT)) + 1)
     out, q = [], q0
     for s in np.linspace(0, 1, n):
-        q, pe, re = arm.ik(pin.SE3(R, p0 + s * (p1 - p0)), q, iters=150)
+        Rs = R @ rot_x(twist_deg * min(1.0, s / twist_frac)) if twist_deg else R
+        q, pe, re = arm.ik(pin.SE3(Rs, p0 + s * (p1 - p0)), q, iters=150)
         if pe > C.IK_POS_TOL or re > C.IK_ROT_TOL_DEG:
             raise PlanError("%s: IK error %.1f mm / %.1f deg at %.0f%%" % (name, pe * 1e3, re, s * 100))
         out.append(q)
@@ -198,13 +210,31 @@ def cartesian(arm, q0, R, p0, p1, speed, name):
 
 
 def build(arm, R, poses):
+    """Tries both twist directions (if a twist is configured) and keeps the one with more joint margin."""
+    best, err = None, None
+    for sign in ((1, -1) if C.PULL_TWIST_DEG else (1,)):
+        try:
+            tr = build_one(arm, R, poses, sign * C.PULL_TWIST_DEG)
+        except PlanError as e:
+            err = e
+            continue
+        if best is None or tr["min_limit_margin"] > best["min_limit_margin"]:
+            best = tr
+    if best is None:
+        raise err
+    return best
+
+
+def build_one(arm, R, poses, twist):
     q_pre, pe, re = arm.ik(pin.SE3(R, poses["pregrasp"]), arm.q_start, seeds=12)
     if pe > C.IK_POS_TOL or re > C.IK_ROT_TOL_DEG:
         raise PlanError("pregrasp IK error %.1f mm / %.1f deg" % (pe * 1e3, re))
     segs = [("to_pregrasp", cosine_joint(arm.q_start, q_pre, C.JOINT_SPEED))]
     segs.append(("approach", cartesian(arm, q_pre, R, poses["pregrasp"], poses["grasp"], C.APPROACH_SPEED, "approach")))
-    segs.append(("pull", cartesian(arm, segs[-1][1][-1], R, poses["grasp"], poses["pull"], C.PULL_SPEED, "pull")))
-    segs.append(("retreat", cartesian(arm, segs[-1][1][-1], R, poses["pull"], poses["retreat"], C.APPROACH_SPEED, "retreat")))
+    segs.append(("pull", cartesian(arm, segs[-1][1][-1], R, poses["grasp"], poses["pull"], C.PULL_SPEED, "pull",
+                                   twist_deg=twist, twist_frac=C.TWIST_FRAC)))
+    R_tw = R @ rot_x(twist)
+    segs.append(("retreat", cartesian(arm, segs[-1][1][-1], R_tw, poses["pull"], poses["retreat"], C.APPROACH_SPEED, "retreat")))
     segs.append(("home", cosine_joint(segs[-1][1][-1], arm.q_start, C.JOINT_SPEED)))
 
     q_all, segments = [], []
@@ -224,11 +254,12 @@ def build(arm, R, poses):
     return {"dt": C.DT, "joints": C.RIGHT_ARM, "motor_idx": C.RIGHT_ARM_IDX, "q": q_all.tolist(),
             "segments": segments,
             "events": [{"at": segments[1]["end"], "type": "close_gripper"}],
-            "start_q": arm.q_start.tolist(), "duration_s": len(q_all) * C.DT,
+            "start_q": arm.q_start.tolist(), "duration_s": len(q_all) * C.DT, "pull_twist_deg": twist,
             "max_joint_speed": float(step), "min_limit_margin": margin + C.LIMIT_MARGIN,
             "tcp_path": {k: v.tolist() for k, v in poses.items()},
             "config": {k: getattr(C, k) for k in ("TCP_XYZ", "CLOSE_AXIS", "PREGRASP_BACK", "GRASP_DEPTH",
-                                                    "PULL_BACK", "PULL_DOWN", "APPROACH_SPEED", "PULL_SPEED")},
+                                                    "PULL_BACK", "PULL_DOWN", "APPROACH_SPEED", "PULL_SPEED",
+                                                    "PULL_TWIST_DEG", "TWIST_FRAC", "TWIST_SPEED_DEG")},
             "planned_at": time.time()}
 
 
@@ -255,8 +286,9 @@ def main():
         sys.exit(2)
     json.dump(traj, open(args.out, "w"))
     seg = ", ".join("%s %.1fs" % (s["name"], (s["end"] - s["start"]) * C.DT) for s in traj["segments"])
-    print("OK  pod %s  approach pitch %+d deg%s" % (np.round(traj["pod_xyz"], 3).tolist(), traj["approach_pitch_deg"],
-                                                    " (jaws flipped)" if traj["close_axis_flipped"] else ""))
+    print("OK  pod %s  approach pitch %+d deg%s, pull twist %+.0f deg" % (
+        np.round(traj["pod_xyz"], 3).tolist(), traj["approach_pitch_deg"],
+        " (jaws flipped)" if traj["close_axis_flipped"] else "", traj["pull_twist_deg"]))
     print("    %d samples, %.1f s: %s" % (len(traj["q"]), traj["duration_s"], seg))
     print("    max joint speed %.2f rad/s, min joint-limit margin %.2f rad -> %s" % (
         traj["max_joint_speed"], traj["min_limit_margin"], args.out))

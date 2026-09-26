@@ -63,13 +63,25 @@ class LowState:
         return list(self.msg.imu_state.rpy) if self.msg is not None else None
 
 
+COLOR_TO_DEPTH = np.eye(4)   # set in start_camera from the camera's own factory calibration
+
+
 def start_camera():
+    """Colour + depth, with the RealSense's stored colour->depth extrinsics. Points are deprojected in the
+    COLOUR optical frame (depth is aligned to colour); the URDF's d435_link is the depth module, so every
+    point is moved by the factory colour->depth transform (~15 mm) before the URDF chain is applied."""
+    global COLOR_TO_DEPTH
     pipe, cfg = rs.pipeline(), rs.config()
     cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     prof = pipe.start(cfg)
     scale = prof.get_device().first_depth_sensor().get_depth_scale()
     intr = prof.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+    ex = prof.get_stream(rs.stream.color).get_extrinsics_to(prof.get_stream(rs.stream.depth))
+    COLOR_TO_DEPTH = np.eye(4)
+    COLOR_TO_DEPTH[:3, :3] = np.asarray(ex.rotation).reshape(3, 3).T      # librealsense stores column-major
+    COLOR_TO_DEPTH[:3, 3] = ex.translation
+    print("RealSense colour->depth offset from factory calibration: %s mm" % np.round(1000 * np.asarray(ex.translation), 1).tolist(), flush=True)
     for _ in range(15):                                   # let auto-exposure settle
         pipe.wait_for_frames()
     return pipe, rs.align(rs.stream.color), scale, intr
@@ -121,7 +133,7 @@ def floor_check(pipe, align, scale, intr, chain, ls):
     q = ls.q()
     if q is None:
         sys.exit("no rt/lowstate")
-    T = T_pelvis_optical(chain, q[12:15])
+    T = T_pelvis_optical(chain, q[12:15]) @ COLOR_TO_DEPTH
     v, u = np.mgrid[240:480:4, 0:640:4]
     z = depth[v, u]
     ok = (z > 0.3) & (z < 3.0)
@@ -185,7 +197,7 @@ def main():
         for f in range(args.frames):
             color, depth = grab(pipe, align, scale)
             q = ls.q() or q
-            T = T_pelvis_optical(chain, q[12:15])
+            T = T_pelvis_optical(chain, q[12:15]) @ COLOR_TO_DEPTH           # pelvis <- colour optical frame
             cv2.imwrite(os.path.join(out, "frames", "%03d.jpg" % f), color, [cv2.IMWRITE_JPEG_QUALITY, 95])
             obs = []
             for d in det.detect(color, depth_m=depth, intrinsics=K, return_rejected=True):
@@ -211,8 +223,8 @@ def main():
                "detector": det.weights.name, "time": time.time()},
               open(os.path.join(out, "candidates.json"), "w"))
     np.savez_compressed(os.path.join(out, "depth_key.npz"), depth_mm=np.round(key_depth * 1000).astype(np.uint16))
-    T = T_pelvis_optical(chain, q[12:15])
-    json.dump({"q": q, "imu_rpy": ls.rpy(), "waist": q[12:15], "intrinsics": {"fx": K[0], "fy": K[1], "ppx": K[2], "ppy": K[3],
+    T = T_pelvis_optical(chain, q[12:15]) @ COLOR_TO_DEPTH
+    json.dump({"q": q, "imu_rpy": ls.rpy(), "waist": q[12:15], "color_to_depth": COLOR_TO_DEPTH.tolist(), "intrinsics": {"fx": K[0], "fy": K[1], "ppx": K[2], "ppy": K[3],
                "width": 640, "height": 480}, "T_pelvis_optical": T.tolist(), "time": time.time()},
               open(os.path.join(out, "robot_state.json"), "w"), indent=1)
     cv2.imwrite(os.path.join(out, "annotated.jpg"), annotate(key_color, summary))

@@ -13,6 +13,7 @@ g1ctl: talk to the G1 robot agent (agent.py on the Orin) from the VM. Standard l
     g1ctl gripper open|close|Q         Dex1 right gripper
     g1ctl say "TEXT"                   speak through the robot's speaker
     g1ctl led R G B                    head LED colour (0-255)
+    g1ctl anchor                       take the current stance as the body-pose reference
     g1ctl ping                         round-trip time
 
 Env: G1_AGENT=host:port (default 192.168.123.164:7777).
@@ -82,7 +83,7 @@ def main():
     num = [float(x) for x in rest if x.replace(".", "", 1).lstrip("-").isdigit()]
     if c == "watch":
         watch(num[0] if num else 10)
-    elif c in ("status", "stop", "ping", "ai", "damp", "ready", "start"):
+    elif c in ("status", "stop", "ping", "ai", "damp", "ready", "start", "anchor"):
         call(c)
     elif c == "zero":
         call("zero", {"confirm": "--confirm" in rest})

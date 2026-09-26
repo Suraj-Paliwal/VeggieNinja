@@ -71,6 +71,24 @@ A detection counts as okra only if it passes all four:
 
 All thresholds are constants at the top of `okra_filter.py`.
 
+## Fine-tuned model (2026-09-27): `models/okra_seg_s02.pt`
+
+Trained on 150 G1 head-camera frames labelled in CVAT (org Junction, task 2623495; 371 polygons):
+`dataset/cvat_to_yolo.py` → `dataset/yolo_s02` (120 train / 30 val, split by time blocks) →
+`train.py --data dataset/yolo_s02/data.yaml --name s02` (80 epochs, 77 min on the VM CPU).
+
+| val (held-out time blocks) | okra_seg.pt | okra_seg_s02.pt |
+|---|---|---|
+| mask mAP50 | 0.035 | **0.962** |
+| box mAP50 | 0.054 | 0.948 |
+| precision / recall (model) | 0.06 / 0.21 | 0.92 / 0.92 |
+| full detector (model + filter) recall / precision | — | **0.89 / 0.95** |
+
+The filter's green hue range was widened to 30–105 (see `okra_filter.py`): with 30–90 the colour check
+threw away 44 % of the real pods (full-detector recall 0.38). The okra pipeline uses `okra_seg_s02.pt`
+(`OKRA_WEIGHTS` overrides). All frames come from ONE session/room: expect lower numbers elsewhere —
+every human answer in the web UI adds new training data (`okra_pick.sh dataset`).
+
 ## Current status / limits (read before relying on it)
 
 - **Tested on:** 4 still photos and one 3.5-minute indoor video (`session01_20260926_165754.mp4`)

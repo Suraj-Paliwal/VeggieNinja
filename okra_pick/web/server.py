@@ -32,7 +32,7 @@ import store  # noqa: E402
 
 AGENT = os.environ.get("G1_AGENT", "192.168.123.164:7777")
 PY_VM = os.path.join(J, "dimos", ".venv", "bin", "python")
-ROBOT_CMDS = {"stop", "status", "ai", "damp", "ready", "start", "step", "head", "gripper", "say", "led", "ping"}
+ROBOT_CMDS = {"stop", "status", "ai", "damp", "ready", "start", "step", "head", "gripper", "say", "led", "ping", "anchor"}
 TOKEN = None
 
 

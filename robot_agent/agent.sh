@@ -16,7 +16,7 @@ alive() { run "[ -f $rdir/agent.pid ] && kill -0 \$(cat $rdir/agent.pid) 2>/dev/
 case "${1:-status}" in
   deploy)
     run "mkdir -p $rdir"
-    scp -q "$here/agent.py" "$here/../g1_video/waist.py" "$host:$rdir/"
+    scp -q "$here/agent.py" "$here/../g1_video/waist.py" "$here"/../okra_pick/robot/{body_pose.py,g1_chain.py,g1.urdf} "$host:$rdir/"
     echo "deployed to $host:~/$rdir"
     ;;
   start)

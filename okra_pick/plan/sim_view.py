@@ -33,8 +33,9 @@ from g1_chain import Chain  # noqa: E402
 MENAGERIE = os.path.join(os.path.dirname(mujoco.__file__), "..", "mujoco_playground", "external_deps",
                          "mujoco_menagerie", "unitree_g1", "scene.xml")
 POD_R = 0.011                      # okra pod radius (m)
-JAW_OPEN, JAW_CLOSED = 0.040, POD_R + 0.004   # jaw inner face distance from the centre line (m)
-LEGEND = "green pod = OKRA | pole = PLANT | dark body + 2 jaws = Dex1 GRIPPER | blue approach, orange pull, grey retreat"
+FINGER_T = 0.006                  # finger thickness along the closing axis (m)
+JAW_OPEN, JAW_CLOSED = 0.040 + FINGER_T / 2, POD_R + FINGER_T / 2   # finger centre from the centre line (m)
+LEGEND = "green pod = OKRA | pole = PLANT | dark body + 2 orange fingers = Dex1 | red dot = grasp point | path: blue/orange/grey"
 
 
 def quat_z_to(v):
@@ -78,10 +79,13 @@ def build_model(traj, base_z):
         jb = wrist.add_body(name="jaw_%s" % ("a" if side > 0 else "b"), pos=tcp)
         j = jb.add_joint(name="jaw_%s_slide" % ("a" if side > 0 else "b"))
         j.type, j.axis, j.range = mujoco.mjtJoint.mjJNT_SLIDE, np.array(axis) * side, [-1, 1]
-        jg = jb.add_geom()
-        half = np.array([0.03, 0.0, 0.0]) + 0.004 * np.array(axis) + 0.013 * np.array(other)
-        jg.type, jg.size, jg.pos = mujoco.mjtGeom.mjGEOM_BOX, np.abs(half), [-0.005, 0, 0]
-        jg.rgba, jg.contype, jg.conaffinity = [0.85, 0.85, 0.9, 1], 0, 0
+        jg = jb.add_geom()                                   # one finger: 6 cm long, 6 mm thick, 2.4 cm tall
+        jg.type = mujoco.mjtGeom.mjGEOM_BOX
+        jg.size = np.array([0.03, 0, 0]) + FINGER_T / 2 * np.abs(axis) + 0.012 * np.abs(other)
+        jg.pos = [-0.01, 0, 0]
+        jg.rgba, jg.contype, jg.conaffinity = [1.0, 0.45, 0.05, 1], 0, 0
+    gp = wrist.add_site(name="grasp_point", pos=tcp, size=[0.005, 0, 0])
+    gp.rgba = [1, 0, 0, 1]
 
     # ---- okra pod (mocap: stays put, then follows the gripper once grasped)
     ax = np.array(traj["target"].get("axis_pelvis") or [0, 0, 1.0])
@@ -171,7 +175,9 @@ class Playback:
             if self.seg_of[i] != "approach":
                 m.geom_rgba[self.stem] = [0, 0, 0, 0]                 # pulled off the plant
             mujoco.mj_forward(m, d)
-        return "%s | gripper %s | t=%.1fs" % (self.seg_of[i], "CLOSED" if i >= self.close_at else "open", i * C.DT)
+        gap = np.linalg.norm(d.site_xpos[m.site("grasp_point").id] - d.mocap_pos[0])
+        return "%s | gripper %s | grasp point to pod %.1f cm | t=%.1fs" % (
+            self.seg_of[i], "CLOSED" if i >= self.close_at else "open", 100 * gap, i * C.DT)
 
 
 def camera(azimuth, lookat):

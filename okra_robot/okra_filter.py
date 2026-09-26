@@ -35,7 +35,9 @@ MAX_LEN_M = 0.25
 MIN_ASPECT = 2.0
 MAX_ASPECT = 7.0
 # colour: OpenCV hue is 0-180; okra green sits around 30-90
-GREEN_HUE = (30, 90)
+GREEN_HUE = (30, 105)    # was (30, 90): the G1 head camera renders these pods at hue ~84 (median), many pixels
+                         # above 90. Measured 2026-09-27 on 371 labelled pods: 30-90 kept 56 %, 30-105 keeps 87 %;
+                         # end-to-end val recall 0.38 -> 0.89, precision 1.00 -> 0.95 (okra_seg_s02.pt)
 MIN_SAT = 50
 MIN_VAL = 40
 MIN_GREEN_FRAC = 0.5

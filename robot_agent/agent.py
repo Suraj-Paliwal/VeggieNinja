@@ -13,7 +13,9 @@ Protocol: newline-delimited JSON over TCP.
   reply     {"id": 1, "ok": true, "result": {...}}  or  {"id": 1, "ok": false, "error": "..."}
   stream    {"state": {...}}                                  (after cmd "watch", until disconnect)
 
-Commands: ping, status, watch, stop, ai, damp, ready, start, zero, step, head, gripper, say, led.
+Commands: ping, status, watch, stop, ai, damp, ready, start, zero, step, head, gripper, say, led, anchor.
+Status includes the body pose (okra_pick/robot/body_pose.py): pelvis shift relative to the feet since the
+last anchor, and whether both feet still agree (a disagreement = a foot moved).
 One motion command runs at a time (others get "busy"); "stop" is always accepted: it sends zero velocity
 and cancels the running task (which then centres/releases the waist or finishes its own safe exit).
 """
@@ -87,6 +89,9 @@ class RealRobot:
 
     def q(self, i):
         return self.ls.motor_state[i].q
+
+    def q29(self):
+        return [self.ls.motor_state[i].q for i in range(29)]
 
     def tau(self, i):
         return self.ls.motor_state[i].tau_est
@@ -183,6 +188,13 @@ class SimRobot:
     def q(self, i):
         return 0.6 if i in (L_KNEE, R_KNEE) else 0.0
 
+    def q29(self):
+        q = [0.0] * 29
+        q[0] = q[6] = -0.33
+        q[3] = q[9] = 0.72
+        q[4] = q[10] = -0.36
+        return q
+
     def tau(self, i):
         return -16.0 if i in (L_KNEE, R_KNEE) else 0.5
 
@@ -235,6 +247,13 @@ class Agent:
         self.fsm_cache, self.mode_cache = None, None
         self.rate, self._last_n, self._last_t = 0.0, 0, time.time()
         self.log_f = open(log_path, "a")
+        self.bp, self.anchor_t = None, None
+        try:
+            from body_pose import BodyPose
+            from g1_chain import Chain
+            self.bp = BodyPose(Chain(os.path.join(HERE, "g1.urdf")))
+        except Exception as e:  # noqa: BLE001 - body pose is optional
+            self.log("body pose unavailable: %s" % e)
         threading.Thread(target=self._poll, daemon=True).start()
 
     def log(self, msg):
@@ -279,7 +298,25 @@ class Agent:
                      knee_load=round(abs(self.r.tau(L_KNEE)) + abs(self.r.tau(R_KNEE)), 1),
                      waist=[round(self.r.q(i), 3) for i in (12, 13, 14)])
         s["balance_ok"], s["balance"] = self.balance()
+        if self.bp is not None and self.r.fresh():
+            q29, rpy = self.r.q29(), self.r.rpy()
+            if self.bp.anchor_q is None:
+                self.bp.anchor(q29, rpy)
+                self.anchor_t = time.time()
+            b = self.bp.status(q29, rpy)
+            sh = b["pelvis_shift_m"]
+            s["body"] = {"shift_mm": round(1000 * math.sqrt(sum(x * x for x in sh)), 1),
+                         "shift_xyz_mm": [round(1000 * x, 1) for x in sh], "rot_deg": round(b["pelvis_rot_deg"], 2),
+                         "feet_ok": b["feet_ok"], "feet_disagree_mm": round(1000 * b["feet_disagree_m"], 1),
+                         "anchored_s_ago": round(time.time() - self.anchor_t, 1)}
         return s
+
+    def reanchor(self):
+        if self.bp is not None and self.r.fresh():
+            self.bp.anchor(self.r.q29(), self.r.rpy())
+            self.anchor_t = time.time()
+            return True
+        return False
 
     # ------------------------------------------------------------- helpers
     def _sleep(self, secs):
@@ -396,6 +433,9 @@ class Agent:
                 with self.loco_lock:
                     self.r.velocity(0.0, 0.0, 0.0, 1.0)
                 emit("stop sent")
+                time.sleep(0.5)
+                if self.reanchor():                            # the feet moved on purpose: new stance
+                    emit("body pose re-anchored at the new stance")
             return {"max_tilt_deg": round(math.degrees(worst), 1), "aborted": aborted,
                     "distance_cm_est": round(100 * dur * math.hypot(vx, vy))}
         return self._motion("step", run, emit)
@@ -468,7 +508,12 @@ def _cmd_led(self, a, emit):
     return {"reply": self.r.led(*rgb)}
 
 
-Agent.cmd_say, Agent.cmd_led = _cmd_say, _cmd_led
+def _cmd_anchor(self, a, emit):
+    """Take the current stance as the new reference for the body pose (after the robot moved on purpose)."""
+    return {"anchored": self.reanchor()}
+
+
+Agent.cmd_say, Agent.cmd_led, Agent.cmd_anchor = _cmd_say, _cmd_led, _cmd_anchor
 
 
 # ======================================================================= TCP server

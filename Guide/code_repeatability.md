@@ -2,6 +2,7 @@
 
 How to reproduce the whole setup from scratch and where each piece is documented.
 Every report in this folder is at most 150 lines. Verified on 2026-09-26.
+**New here? Start with [`../STARTER.md`](../STARTER.md)** (power-on to moving the robot, step by step).
 
 ## Reports (one per functionality)
 
@@ -20,6 +21,7 @@ Every report in this folder is at most 150 lines. Verified on 2026-09-26.
 | 11 | [11_okra_pick_pipeline.md](11_okra_pick_pipeline.md) | Okra detection → IK plan → on-robot grasp, sim, tests |
 | 12 | [12_robot_agent.md](12_robot_agent.md) | Persistent robot agent: fast TCP commands, instant stop |
 | 13 | [13_human_in_the_loop.md](13_human_in_the_loop.md) | Operator web UI; robot asks when unsure; answers become training data; okra_data/ |
+| 14 | [14_spatial_awareness_closed_loop.md](14_spatial_awareness_closed_loop.md) | Body pose from legs + IMU; closed-loop reach that follows body motion |
 
 ## System at a glance
 

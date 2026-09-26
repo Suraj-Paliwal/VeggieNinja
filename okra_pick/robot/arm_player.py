@@ -67,6 +67,9 @@ class Robot:
     def q(self, idx):
         return np.array([self.ls.motor_state[i].q for i in idx])
 
+    def q29(self):
+        return [self.ls.motor_state[i].q for i in range(29)]
+
     def tau(self, idx):
         return np.array([self.ls.motor_state[i].tau_est for i in idx])
 
@@ -114,9 +117,16 @@ class Abort(Exception):
 
 
 class Player:
-    def __init__(self, robot, traj, until):
+    def __init__(self, robot, traj, until, closed_loop=True):
         self.r, self.t = robot, traj
         self.Q = np.array(traj["q"])
+        self.corr = None
+        if closed_loop and traj.get("target", {}).get("q") and traj.get("pod_xyz"):
+            from closed_loop import Corrector
+            from g1_chain import Chain
+            self.corr = Corrector(Chain(os.path.join(HERE, "g1.urdf")), traj)
+        self.cmd_q = self.Q[0].copy()
+        self.corr_log = []
         self.until = until
         self.log = []
         self.stop = threading.Event()
@@ -146,7 +156,7 @@ class Player:
         r, p = self.r.tilt()
         if max(abs(r - r0), abs(p - p0)) > C.ABORT_TILT_DRIFT:
             raise Abort("tilt drift: roll %+.1f pitch %+.1f deg" % (np.degrees(r - r0), np.degrees(p - p0)))
-        err = np.abs(self.r.q(C.RIGHT_ARM_IDX) - self.Q[i])
+        err = np.abs(self.r.q(C.RIGHT_ARM_IDX) - self.cmd_q)
         if i > 0 and err.max() > C.MAX_TRACK_ERR:
             raise Abort("tracking error %.2f rad on %s (blocked?)" % (err.max(), C.RIGHT_ARM[int(err.argmax())]))
         if seg == "pull" and self.holding:
@@ -200,7 +210,20 @@ class Player:
                 self.check(i, seg, hold_upper, r0, p0)
                 if done == 0 or seg != seg_of[i - 1]:
                     print("segment: %s" % seg, flush=True)
-                self.r.send_arm(self.upper_with_arm(hold_upper, self.Q[i]), 1.0)
+                if self.corr is not None:
+                    if i % max(1, int(round(1.0 / (C.CORRECT_HZ * C.DT)))) == 0:
+                        try:
+                            d = self.corr.update(self.r.q29(), self.Q[i])
+                        except Exception as e:  # closed_loop.Moved
+                            raise Abort(str(e))
+                        self.corr_log.append([time.time(), i] + [float(x) for x in d])
+                    s0 = next(x for x in self.t["segments"] if x["name"] == seg)
+                    frac = (i - s0["start"]) / float(max(1, s0["end"] - s0["start"]))
+                    w = frac if seg == "to_pregrasp" else (1.0 - frac) if seg == "home" else 1.0
+                    self.cmd_q = self.corr.command(self.Q[i], w)
+                else:
+                    self.cmd_q = self.Q[i]
+                self.r.send_arm(self.upper_with_arm(hold_upper, self.cmd_q), 1.0)
                 self.r.send_grip(self.r.grip_target)
                 self.log.append([time.time(), i] + self.r.q(C.RIGHT_ARM_IDX).tolist())
                 i += 1
@@ -257,6 +280,11 @@ def preflight(robot, traj):
         diff = np.abs(robot.q(C.RIGHT_ARM_IDX) - np.array(traj["start_q"])).max()
         if diff > C.MAX_START_DIFF:
             return "plan is stale: arm moved %.2f rad since planning (max %.2f)" % (diff, C.MAX_START_DIFF)
+        tq = traj.get("target", {}).get("q")
+        if tq:
+            wd = np.abs(robot.q(C.WAIST_IDX) - np.array(tq[12:15])).max()
+            if wd > C.MAX_WAIST_DIFF:
+                return "waist moved %.2f rad since perception (max %.2f): look again" % (wd, C.MAX_WAIST_DIFF)
         age = time.time() - traj.get("planned_at", 0)
         if age > 300:
             return "plan is %.0f s old (max 300)" % age
@@ -270,6 +298,7 @@ def main():
     ap.add_argument("--until", choices=["to_pregrasp", "approach"], help="stop after this segment and go back")
     ap.add_argument("--gripper", choices=["open", "close"])
     ap.add_argument("--iface", default="eth0")
+    ap.add_argument("--open-loop", action="store_true", help="disable the body-motion correction")
     args = ap.parse_args()
 
     robot = Robot(args.iface, args.dry)
@@ -290,11 +319,11 @@ def main():
           flush=True)
     if args.dry:
         return
-    player = Player(robot, traj, args.until)
+    player = Player(robot, traj, args.until, closed_loop=not args.open_loop)
     signal.signal(signal.SIGINT, lambda *_: player.stop.set())
     aborted = player.run()
     log = os.path.splitext(args.trajectory)[0] + "_executed.json"
-    json.dump({"aborted": aborted, "log": player.log}, open(log, "w"))
+    json.dump({"aborted": aborted, "log": player.log, "corrections": player.corr_log}, open(log, "w"))
     print("result: %s  (log %s)" % ("ABORTED: " + aborted if aborted else "OK", log))
     sys.exit(1 if aborted else 0)
 

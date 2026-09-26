@@ -32,6 +32,7 @@ class FakeRobot:
         self.grip_q, self.grip_target, self.ls_t = 5.3, None, time.time()
         self.ls = True
         self.seg_now = "?"
+        self.q_plan29 = list(traj.get("target", {}).get("q", [0.0] * 29))
         self.sent_arm = 0
         self.sent_grip = []
 
@@ -40,6 +41,12 @@ class FakeRobot:
         if idx == C.RIGHT_ARM_IDX:
             return self.qarm.copy()
         return self.upper.copy()
+
+    def q29(self):
+        q = list(self.q_plan29)
+        for n, i in enumerate(C.RIGHT_ARM_IDX):
+            q[i] = float(self.qarm[n])
+        return q
 
     def tau(self, idx):
         return np.full(7, 20.0 if (self.scenario == "stuck_pod" and self.seg_now == "pull") else 2.0)

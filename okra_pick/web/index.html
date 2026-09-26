@@ -72,6 +72,7 @@
   <span id="p_tilt" class="pill">tilt …</span>
   <span id="p_knee" class="pill">knees …</span>
   <span id="p_grip" class="pill">gripper …</span>
+  <span id="p_body" class="pill" title="pelvis shift relative to the feet since the last anchor">body …</span>
   <span id="p_rec" class="pill">rec …</span>
   <span id="p_busy" class="pill">idle</span>
   <button id="stop" title="Zero velocity + cancel the running motion (key: Esc)">STOP</button>
@@ -82,7 +83,8 @@
   <section>
     <div class="card">
       <h2>Robot</h2>
-      <div class="row"><button onclick="agent('start')">Start agent</button><button onclick="agent('restart')">Restart agent</button></div>
+      <div class="row"><button onclick="agent('start')">Start agent</button><button onclick="agent('restart')">Restart agent</button>
+        <button title="take the current stance as the reference for the body pose" onclick="robot('anchor')">Re-anchor body</button></div>
       <h3>Bring-up</h3>
       <div class="row">
         <button onclick="robotConfirm('ai','Switch the robot to AI mode (after a reboot)?')">AI mode</button>
@@ -250,6 +252,10 @@ function renderHeader() {
          Math.max(Math.abs(r.roll_deg || 0), Math.abs(r.pitch_deg || 0)) > 5 ? 'bad' : '');
     pill('p_knee', 'knees ' + (r.knee_load ?? '—') + ' Nm');
     pill('p_grip', 'gripper ' + (r.gripper_q ?? '—'));
+    const b = r.body;
+    if (b) pill('p_body', b.feet_ok ? `body Δ ${b.shift_mm} mm · feet ok` : `FOOT MOVED (${b.feet_disagree_mm} mm)`,
+                !b.feet_ok ? 'bad' : b.shift_mm > 10 ? 'warn' : '');
+    else pill('p_body', 'body —');
   }
   pill('p_rec', S.recording || 'rec ?', (S.recording || '').startsWith('RECORDING') ? 'bad' : '');
   const busy = (r && r.busy) || (S.job.running && S.job.name);

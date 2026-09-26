@@ -34,6 +34,9 @@ CLOSE_AXIS = "y"                         # wrist axis the jaws close along: "y" 
 PREGRASP_BACK = 0.08                     # start of the straight approach, behind the pod (0.12 shrinks the reach, see Guide)
 GRASP_DEPTH = 0.01                       # go this far past the pod centre so it sits deep in the jaws
 PULL_BACK, PULL_DOWN = 0.06, 0.02        # harvesting pull after closing
+PULL_TWIST_DEG = 45.0                    # wrist twist about the gripper axis during the pull (0 = straight pull)
+TWIST_FRAC = 0.5                         # the twist happens during the first half of the pull, then pull straight
+TWIST_SPEED_DEG = 25.0                   # deg/s cap for the twist (~0.44 rad/s on the wrist, like the 0.5 rad/s joint cap)
 RETREAT_BACK = 0.15
 APPROACH_PITCHES_DEG = (0, -15, 15, -30, 30)   # tried in order if the horizontal approach has no IK
 
@@ -54,4 +57,7 @@ MAX_TILT = 0.05                          # rad (~3 deg) to start
 ABORT_TILT_DRIFT = 0.08                  # rad (~5 deg) tilt change aborts
 MAX_TRACK_ERR = 0.30                     # rad commanded-vs-measured on any right-arm joint aborts
 MAX_PULL_TAU = 12.0                      # Nm on any right-arm joint during the pull aborts (release + retreat)
+MAX_CORRECTION = 0.03                    # m: body moved more than this since perception -> abort, look again
+CORRECT_HZ = 25.0                        # how often the closed-loop correction is recomputed
+MAX_WAIST_DIFF = 0.05                    # rad: waist now vs at perception (the plan assumes the same waist)
 STALE_S = 0.4                            # s without rt/lowstate aborts (on the robot: ~1 kHz, gaps up to ~0.18 s seen)

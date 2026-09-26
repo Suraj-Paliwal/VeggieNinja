@@ -50,8 +50,10 @@ camera view (camera 0.47 m above pelvis, pitched 47.6° down):
 1. `to_pregrasp` joint space (peak 0.5 rad/s) to 8 cm behind the pod, jaws open
 2. `approach` straight line at 4 cm/s to 1 cm past the pod centre (straight to 0.1 mm)
 3. close gripper; holding = jaws stop at q > 0.4 rad (else "closed on nothing" → abort)
-4. `pull` straight back 6 cm and down 2 cm at 2 cm/s (harvest)
-5. `retreat` another 9 cm back, `home` joint space to the start pose; gripper stays closed
+4. `pull` back 6 cm and down 2 cm at 2 cm/s **with a 45° wrist twist about the gripper axis** during its first
+   half (`PULL_TWIST_DEG`, `TWIST_FRAC`, ≤ 25°/s); both twist directions are planned, the one with more
+   joint margin wins; `PULL_TWIST_DEG = 0` gives the old straight pull
+5. `retreat` another 9 cm back (twist kept), `home` joint space to the start pose; gripper stays closed
 
 Jaws close across the pod: closing axis = approach × pod axis. Approach horizontal first, then
 tilted ±15°/±30° if no IK; both jaw orientations tried, best joint-limit margin wins.
@@ -61,6 +63,7 @@ tilted ±15°/±30° if no IK; both jaw orientations tried, best joint-limit mar
 Preflight: FSM 200/500/501, |roll|,|pitch| < 3°, fresh lowstate, plan start pose within 0.15 rad of
 the arm now, plan < 5 min old. Blend in/out 2 s holding waist + left arm where they are.
 Every tick: tilt drift > 5°, lowstate stale > 0.4 s, tracking error > 0.30 rad, pull torque > 12 Nm.
+Closed loop (Guide 14): 25 Hz correction for body motion; abort if a foot moved or the body moved > 3 cm.
 Abort: before the pull → back along the executed path (gripper opened if it had closed);
 during the pull → open gripper, then back; after the pull → stop there, keep the pod, blend out.
 Ctrl-C = abort.

@@ -26,6 +26,7 @@ rdir=okra_pick
 PY_VM="$J/dimos/.venv/bin/python"
 PY_DET="~/miniconda3/envs/g1brainco/bin/python"          # robot: torch+CUDA, pyrealsense2, sdk
 PY_ARM="PYTHONPATH=~/g1_rec/pylib python3"               # robot: player (same env as the recorder)
+WEIGHTS="${OKRA_WEIGHTS:-okra_seg_s02.pt}"                # detector in okra_robot/models (fine-tuned 2026-09-27)
 run() { ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "$@"; }
 yes_flag=0; for a in "$@"; do [ "$a" = "--yes" ] && yes_flag=1; done
 confirm() {  # word
@@ -43,7 +44,7 @@ cmd="${1:-help}"; shift || true
 case "$cmd" in
   deploy)
     run "mkdir -p $rdir/robot $rdir/okra_robot/models $rdir/runs $rdir/events"
-    scp -q "$here"/robot/{okra_perceive.py,candidates.py,arm_player.py,pick_config.py,g1_chain.py,g1.urdf} "$host:$rdir/robot/"
+    scp -q "$here"/robot/{okra_perceive.py,candidates.py,arm_player.py,pick_config.py,g1_chain.py,g1.urdf,body_pose.py,closed_loop.py} "$host:$rdir/robot/"
     scp -q "$J"/okra_robot/{okra_detector.py,okra_filter.py} "$host:$rdir/okra_robot/"
     rsync -a "$J"/okra_robot/models/ "$host:$rdir/okra_robot/models/"
     run "cd $rdir/robot && $PY_DET -c 'import pyrealsense2, torch, ultralytics, okra_perceive; print(\"perceive env ok, cuda\", torch.cuda.is_available())' 2>&1 | tail -1;
@@ -61,7 +62,7 @@ case "$cmd" in
   perceive)
     d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())"); r=$(basename "$d")
     free_camera
-    run "cd $rdir/robot && $PY_DET okra_perceive.py --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
+    run "cd $rdir/robot && $PY_DET okra_perceive.py --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
     rsync -a "$host:$rdir/events/$r/" "$d/" || { echo "no event bundle (see above)"; exit 1; }
     echo "event $r -> $d"
     "$PY_VM" "$HITL/confirm.py" "$d" "$@"
@@ -69,7 +70,7 @@ case "$cmd" in
   look)   # perceive only (the web interface asks the question itself); prints EVENT_DIR=<path>
     d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())"); r=$(basename "$d")
     free_camera
-    run "cd $rdir/robot && $PY_DET okra_perceive.py --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
+    run "cd $rdir/robot && $PY_DET okra_perceive.py --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
     rsync -a "$host:$rdir/events/$r/" "$d/" || { echo "no event bundle (see above)"; exit 1; }
     echo "EVENT_DIR=$d"
     ;;
