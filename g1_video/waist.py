@@ -5,7 +5,12 @@ waist yaw/pitch. arm_sdk blends our targets over the built-in controller, which 
 balancing. Arms are held at the pose they had when control was first engaged.
 
 Nothing is sent until engage() is called; release() ramps the blend weight back to 0.
+All goals are RELATIVE to the waist pose at engage() ("home"): center() returns there and
+release() only lets go once the waist command is back at home. (Absolute 0 is not safe: this
+robot's waist yaw reads about -0.61 rad at rest.)
 """
+from __future__ import annotations  # Python 3.8 on the robot
+
 import threading
 import time
 
@@ -22,21 +27,23 @@ DT = 0.02
 KP_WAIST, KD_WAIST = 60.0, 2.0
 KP_ARM, KD_ARM = 40.0, 1.5
 
-# Conservative limits (rad) and max joint speed (rad/s)
-YAW_LIMIT = 0.6     # ~34 deg left/right; positive = turn left
-PITCH_LIMIT = 0.3   # ~17 deg; positive = lean forward / look down
+# Conservative limits (rad, relative to home) and max joint speed (rad/s)
+YAW_LIMIT = 0.6     # ~34 deg left/right of home; positive = turn left
+PITCH_LIMIT = 0.3   # ~17 deg of home; positive = lean forward / look down
 SPEED = 0.4
 
 
 class WaistController(threading.Thread):
-    def __init__(self) -> None:
+    def __init__(self, speed: float = SPEED) -> None:
         super().__init__(daemon=True)
+        self.speed = min(max(float(speed), 0.05), SPEED)  # rad/s, 0.05..SPEED
         self.pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
         self.pub.Init()
         self.state = None
         ChannelSubscriber("rt/lowstate", LowState_).Init(self._on_state, 10)
         self.lock = threading.Lock()
-        self.goal_yaw = self.goal_pitch = 0.0
+        self.goal_yaw = self.goal_pitch = 0.0      # offsets from home
+        self.home = None                           # (yaw, roll, pitch) at engage()
         self.weight_goal = 0.0
         self.engaged = threading.Event()
         self.released = threading.Event()
@@ -54,8 +61,9 @@ class WaistController(threading.Thread):
         if self.state is None:
             return False
         with self.lock:
-            self.goal_yaw = self.state.motor_state[WAIST_YAW].q
-            self.goal_pitch = self.state.motor_state[WAIST_PITCH].q
+            ms = self.state.motor_state
+            self.home = (ms[WAIST_YAW].q, ms[WAIST_ROLL].q, ms[WAIST_PITCH].q)
+            self.goal_yaw = self.goal_pitch = 0.0
             self.weight_goal = 1.0
         self.engaged.set()
         self.start()
@@ -71,6 +79,7 @@ class WaistController(threading.Thread):
             self.goal_yaw = self.goal_pitch = 0.0
 
     def goal(self) -> tuple[float, float]:
+        """Current (yaw, pitch) goal as offsets from home."""
         with self.lock:
             return self.goal_yaw, self.goal_pitch
 
@@ -86,20 +95,21 @@ class WaistController(threading.Thread):
     def run(self) -> None:
         s = self.state
         hold = np.array([s.motor_state[j].q for j in JOINTS])  # arms stay here
+        home_yaw, home_roll, home_pitch = self.home
         yaw, roll, pitch = hold[0], hold[1], hold[2]
         weight = 0.0
         cmd, crc = unitree_hg_msg_dds__LowCmd_(), CRC()
-        step = SPEED * DT
+        step = self.speed * DT
         next_t = time.monotonic()
         while True:
             with self.lock:
                 gy, gp, gw = self.goal_yaw, self.goal_pitch, self.weight_goal
-            # Only center-then-release: keep weight up until the waist is back near 0
-            if gw == 0.0 and max(abs(yaw), abs(roll), abs(pitch)) > 0.02:
+            # Only center-then-release: keep weight up until the waist command is back home
+            if gw == 0.0 and max(abs(yaw - home_yaw), abs(roll - home_roll), abs(pitch - home_pitch)) > 0.02:
                 gw = 1.0
-            yaw += float(np.clip(gy - yaw, -step, step))
-            pitch += float(np.clip(gp - pitch, -step, step))
-            roll += float(np.clip(0.0 - roll, -step, step))
+            yaw += float(np.clip(home_yaw + gy - yaw, -step, step))
+            pitch += float(np.clip(home_pitch + gp - pitch, -step, step))
+            roll += float(np.clip(home_roll - roll, -step, step))
             weight += float(np.clip(gw - weight, -DT / 2.0, DT / 2.0))  # 2 s full ramp
 
             q = hold.copy()

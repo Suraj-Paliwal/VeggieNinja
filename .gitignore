@@ -1,0 +1,34 @@
+# secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# logs
+*.log
+
+# robot recordings: large and regenerable (index in recordings/README.md)
+recordings/*.mp4
+recordings/*.mkv
+g1_record/data/
+g1_video/recordings/
+
+# okra dataset: frames and labeling images (the labeling copy lives in CVAT, org Junction)
+okra_robot/dataset/raw_*/
+okra_robot/dataset/*/images/
+okra_robot/dataset/*/labels/
+okra_robot/dataset/**/contact_sheet*.jpg
+okra_robot/dataset/contact_sheet*.jpg
+okra_robot/dataset/to_label/
+
+# TensorRT engines are built per device (export_model.py on the robot)
+*.engine
+
+# training output
+runs/
+
+# model weights (share separately; ~17 MB)
+okra_robot/models/*.pt
+okra_robot/models/*.onnx

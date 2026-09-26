@@ -101,13 +101,13 @@ def ffmpeg_color(args, out):
     w, h = args.size.split("x")
     tee = "[f=matroska]%s/color.mkv|[f=mkvtimestamp_v2]%s/color_ts.txt" % (out, out)
     if args.preview:
-        tee += "|[f=mpegts:onfail=ignore]udp://%s?pkt_size=1316" % args.preview
+        tee += "|[f=mpegts:bsfs/v=dump_extra:onfail=ignore]udp://%s?pkt_size=1316" % args.preview
     return ["ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
             "-f", "v4l2", "-input_format", "yuyv422", "-video_size", "%sx%s" % (w, h),
             "-framerate", str(args.fps), "-use_wallclock_as_timestamps", "1", "-i", COLOR_DEV,
             "-copyts", "-map", "0:v", "-c:v", "libx264", "-preset", args.preset, "-tune", "zerolatency",
             "-crf", str(args.crf), "-pix_fmt", "yuv420p", "-g", str(args.fps),
-            "-f", "tee", tee]
+            "-flags", "+global_header", "-f", "tee", tee]  # tee + mkv needs the global header
 
 
 def ffmpeg_depth(args, out):
@@ -115,7 +115,18 @@ def ffmpeg_depth(args, out):
             "-f", "v4l2", "-input_format", "gray16le", "-video_size", args.depth_size,
             "-framerate", str(args.fps), "-use_wallclock_as_timestamps", "1", "-i", DEPTH_DEV,
             "-copyts", "-map", "0:v", "-c:v", "ffv1", "-level", "3", "-threads", "4",
-            "-f", "tee", "[f=matroska]%s/depth.mkv|[f=mkvtimestamp_v2]%s/depth_ts.txt" % (out, out)]
+            "-flags", "+global_header", "-f", "tee", "[f=matroska]%s/depth.mkv|[f=mkvtimestamp_v2]%s/depth_ts.txt" % (out, out)]
+
+
+def rezero(path):
+    """-copyts leaves epoch timestamps in the .mkv; rewrite it to start at 0 (stream copy, fast).
+    The epoch times stay in the *_ts.txt file."""
+    tmp = path + ".tmp.mkv"
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", path,
+                        "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero", tmp])
+    if r.returncode == 0:
+        os.replace(tmp, path)
+    return r.returncode
 
 
 def stop_proc(p, name):
@@ -189,6 +200,7 @@ def main():
     for sub in subs:
         sub.Close()
     meta["ffmpeg_exit"] = {n: stop_proc(p, n) for n, p in procs.items()}
+    meta["rezero_exit"] = {n: rezero(os.path.join(out, n + ".mkv")) for n in procs}
     for log in logs:
         log.flush()
     meta["stop_time"] = time.time()

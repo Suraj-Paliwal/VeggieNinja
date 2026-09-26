@@ -8,6 +8,7 @@
 #   ./rec.sh list                  episodes on the robot
 #   ./rec.sh pull [EPISODE]        rsync all (or one) episodes to ./data/
 #   ./rec.sh release               give the camera back to Unitree's videohub (for view.py)
+#   ./rec.sh head [ARGS]           run head_teleop.py ON THE ROBOT (--yaw -0.15 | --sweep | keys)
 set -e
 here="$(cd "$(dirname "$0")" && pwd)"
 host=unitree@192.168.123.164
@@ -30,15 +31,16 @@ case "${1:-status}" in
     # Unitree's videohub holds the head camera; stop it (restart with ./rec.sh release).
     run "/unitree/sbin/mscli getservice video_hub_pc4 | grep -q 'status:0' && /unitree/sbin/mscli stopservice video_hub_pc4 >/dev/null; sleep 1; true"
     ep="episodes/${name}_$(date +%Y%m%d_%H%M%S)"
-    run "cd $rdir && mkdir -p $ep && PYTHONPATH=pylib nohup python3 -u recorder.py --out $ep $* \
-         > $ep/recorder.log 2>&1 < /dev/null & echo \$! > recorder.pid; echo $ep > current"
+    run "cd $rdir || exit 1; mkdir -p $ep; echo $ep > current; \
+         PYTHONPATH=pylib nohup python3 -u recorder.py --out $ep $* > $ep/recorder.log 2>&1 < /dev/null & \
+         echo \$! > recorder.pid"
     sleep 4
     run "cd $rdir && tail -5 \$(cat current)/recorder.log"
     running && echo "RECORDING $ep" || { echo "recorder did not stay up, see log above"; exit 1; }
     ;;
   stop)
     running || { echo "not recording"; exit 0; }
-    run "kill -INT \$(cat $pidf); for i in \$(seq 30); do kill -0 \$(cat $pidf) 2>/dev/null || break; sleep 0.5; done; \
+    run "kill -INT \$(cat $pidf); for i in \$(seq 600); do kill -0 \$(cat $pidf) 2>/dev/null || break; sleep 0.5; done; \
          cd $rdir && tail -3 \$(cat current)/recorder.log && ls -lh \$(cat current) && rm -f recorder.pid"
     ;;
   status)
@@ -60,5 +62,11 @@ case "${1:-status}" in
     running && { echo "recording in progress, stop first"; exit 1; }
     run "/unitree/sbin/mscli startservice video_hub_pc4"
     ;;
-  *) sed -n '2,10p' "$0"; exit 2 ;;
+  head)
+    # Waist control runs on the Orin: 1 kHz state for the balance watch, no lossy link for commands.
+    shift
+    scp -q "$here/head_teleop.py" "$here/../g1_video/waist.py" "$host:$rdir/"
+    exec ssh -t -o ConnectTimeout=5 "$host" "cd $rdir && PYTHONPATH=pylib python3 -u head_teleop.py --iface eth0 $*"
+    ;;
+  *) sed -n '2,11p' "$0"; exit 2 ;;
 esac

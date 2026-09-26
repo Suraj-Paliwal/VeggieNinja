@@ -1,236 +1,0 @@
-10:30:29.498 [inf][imos/cli/commands/lifecycle.py] Starting DimOS
-10:31:03.720 [inf][dination/module_coordinator.py] Building the blueprint
-10:31:03.729 [inf][dination/module_coordinator.py] Starting the modules
-10:31:15.377 [inf][ation/worker_manager_python.py] Worker pool started. n_workers=8
-10:31:21.056 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:21.159 [inf][/coordination/python_worker.py] Deployed module. module=RerunWebSocketServer module_id=1 worker_id=2
-10:31:21.574 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:22.940 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:23.084 [inf][et_vis/websocket_vis_module.py] WebSocket visualization module initialized on port 7779, GPS goal tracking enabled
-10:31:23.104 [inf][/coordination/python_worker.py] Deployed module. module=WebsocketVisModule module_id=2 worker_id=3
-10:31:23.286 [inf][/coordination/python_worker.py] Deployed module. module=MovementManager module_id=8 worker_id=3
-10:31:23.772 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:24.009 [inf][/coordination/python_worker.py] Deployed module. module=G1SimConnection module_id=6 worker_id=7
-10:31:24.066 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:24.092 [inf][/coordination/python_worker.py] Deployed module. module=ReplanningAStarPlanner module_id=7 worker_id=2
-10:31:24.109 [inf][/coordination/python_worker.py] Deployed module. module=WavefrontFrontierExplorer module_id=5 worker_id=6
-10:31:24.236 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:24.265 [inf][/coordination/python_worker.py] Deployed module. module=CostMapper module_id=4 worker_id=5
-10:31:27.779 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:27.800 [inf][/coordination/python_worker.py] Deployed module. module=VoxelGridMapper module_id=3 worker_id=4
-10:31:28.187 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:28.240 [inf][/coordination/python_worker.py] Deployed module. module=RerunBridgeModule module_id=0 worker_id=0
-10:31:29.514 [inf][/coordination/python_worker.py] Deployed module. module=ObjectTracking module_id=10 worker_id=4
-10:31:40.494 [inf][otocol/service/zenohservice.py] Zenoh session opened connect=[] gossip=True listen=['tcp/127.0.0.1:0'] mode=peer multicast_interface=lo
-10:31:40.581 [inf][rimental/spatial_perception.py] Removed existing ChromaDB files from /home/ros2/Junction/dimos/assets/output/memory/spatial_memory/chromadb_data
-10:31:45.421 [inf][/experimental/visual_memory.py] VisualMemory initialized with output directory: /home/ros2/Junction/dimos/assets/output/memory/spatial_memory
-Downloading LFS objects:   0% (0/1), 0 B | 0 B/s                                Downloading LFS objects:   0% (0/1), 0 B | 0 B/s                                Downloading LFS objects:   0% (0/1), 16 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 86 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 242 KB | 0 B/s                             Downloading LFS objects:   0% (0/1), 712 KB | 0 B/s                             Downloading LFS objects:   0% (0/1), 1.4 MB | 0 B/s                             Downloading LFS objects:   0% (0/1), 2.4 MB | 699 KB/s                          Downloading LFS objects:   0% (0/1), 4.9 MB | 699 KB/s                          Downloading LFS objects:   0% (0/1), 8.2 MB | 699 KB/s                          Downloading LFS objects:   0% (0/1), 12 MB | 699 KB/s                           Downloading LFS objects:   0% (0/1), 17 MB | 699 KB/s                           Downloading LFS objects:   0% (0/1), 21 MB | 6.4 MB/s                           Downloading LFS objects:   0% (0/1), 25 MB | 6.4 MB/s                           Downloading LFS objects:   0% (0/1), 30 MB | 6.4 MB/s                           Downloading LFS objects:   0% (0/1), 34 MB | 6.4 MB/s                           Downloading LFS objects:   0% (0/1), 38 MB | 6.4 MB/s                           Downloading LFS objects:   0% (0/1), 42 MB | 10 MB/s                            Downloading LFS objects:   0% (0/1), 45 MB | 10 MB/s                            Downloading LFS objects:   0% (0/1), 49 MB | 10 MB/s                            Downloading LFS objects:   0% (0/1), 54 MB | 10 MB/s                            Downloading LFS objects:   0% (0/1), 58 MB | 10 MB/s                            Downloading LFS objects:   0% (0/1), 62 MB | 12 MB/s                            Downloading LFS objects:   0% (0/1), 66 MB | 12 MB/s                            Downloading LFS objects:   0% (0/1), 70 MB | 12 MB/s                            Downloading LFS objects:   0% (0/1), 74 MB | 12 MB/s                            Downloading LFS objects:   0% (0/1), 78 MB | 12 MB/s                            Downloading LFS objects:   0% (0/1), 82 MB | 13 MB/s                            Downloading LFS objects:   0% (0/1), 85 MB | 13 MB/s                            Downloading LFS objects:   0% (0/1), 85 MB | 13 MB/s                            Downloading LFS objects:   0% (0/1), 86 MB | 13 MB/s                            Downloading LFS objects:   0% (0/1), 90 MB | 13 MB/s                            Downloading LFS objects:   0% (0/1), 97 MB | 13 MB/s                            Downloading LFS objects:   0% (0/1), 101 MB | 13 MB/s                           Downloading LFS objects:   0% (0/1), 105 MB | 13 MB/s                           Downloading LFS objects:   0% (0/1), 113 MB | 13 MB/s                           Downloading LFS objects:   0% (0/1), 117 MB | 13 MB/s                           Downloading LFS objects:   0% (0/1), 122 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 125 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 127 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 128 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 132 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 137 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 142 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 147 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 153 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 156 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 158 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 159 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 167 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 168 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 174 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 178 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 180 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 181 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 183 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 186 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 189 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 189 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 191 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 194 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 197 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 199 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 204 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 205 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 211 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 217 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 221 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 222 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 222 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 224 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 229 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 235 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 239 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 241 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 245 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 250 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 257 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 262 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 266 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 268 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 269 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 269 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 271 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 272 MB | 16 MB/s                           Downloading LFS objects:   0% (0/1), 272 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 273 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 275 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 280 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 281 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 281 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 284 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 285 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 285 MB | 15 MB/s                           Downloading LFS objects:   0% (0/1), 285 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 285 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 285 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 286 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 287 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 287 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 287 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 289 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 295 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 303 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 308 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 312 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 316 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 321 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 328 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 333 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 336 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 341 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 345 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 350 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 354 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 358 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 361 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 364 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 366 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 368 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 373 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 378 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 384 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 387 MB | 14 MB/s                           Downloading LFS objects:   0% (0/1), 391 MB | 15 MB/s                           Downloading LFS objects: 100% (1/1), 392 MB | 15 MB/s                           /home/ros2/Junction/dimos/.venv/lib/python3.12/site-packages/onnxruntime/capi/onnxruntime_inference_collection.py:123: UserWarning: Specified provider 'CUDAExecutionProvider' is not in available provider names.Available providers: 'AzureExecutionProvider, CPUExecutionProvider'
-  warnings.warn(
-Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
-10:32:53.012 [inf][/coordination/python_worker.py] Deployed module. module=SpatialMemory module_id=9 worker_id=1
-10:33:41.336 [inf][/visualization/rerun/bridge.py] Rerun bridge starting
-10:33:41.553 [inf][os/visualization/rerun/init.py] Rerun gRPC server ready at rerun+http://127.0.0.1:9877/proxy
-10:33:43.246 [inf][dimos/mapping/voxels/grid.py  ] VoxelGrid using device: CPU:0 (packed-numpy)
-Matplotlib is building the font cache; this may take a moment.
-10:33:54.923 [inf][/visualization/rerun/bridge.py] bridge listening on Zenoh
-10:33:55.193 [inf][/visualization/rerun/bridge.py] Rerun static entity archetypes=['Boxes3D', 'Transform3D'] entity_path=world/tf/base_link
-10:33:57.259 [inf][tion/rerun/websocket_server.py] RerunWebSocketServer: viewer connected from ('127.0.0.1', 47646)
-[2026-09-25T10:34:01Z WARN  re_renderer::context] Software rasterizer detected - expect poor performance. See: https://www.rerun.io/docs/overview/installing-rerun/troubleshooting#graphics-issues
-[2026-09-25T10:34:01Z INFO  re_renderer::context] wgpu adapter backend: Vulkan, device_type: Cpu, name: "llvmpipe (LLVM 15.0.7, 256 bits)", driver: "llvmpipe", driver_info: "Mesa 23.2.1-1ubuntu3.1~22.04.3 (LLVM 15.0.7)"
-Downloading LFS objects:   0% (0/1), 0 B | 0 B/s                                Downloading LFS objects:   0% (0/1), 0 B | 0 B/s                                Downloading LFS objects:   0% (0/1), 16 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 33 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 86 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 190 KB | 0 B/s                             Downloading LFS objects:   0% (0/1), 382 KB | 0 B/s                             Downloading LFS objects:   0% (0/1), 799 KB | 358 KB/s                          Downloading LFS objects:   0% (0/1), 1.6 MB | 358 KB/s                          Downloading LFS objects:   0% (0/1), 3.3 MB | 358 KB/s                          Downloading LFS objects:   0% (0/1), 6.4 MB | 358 KB/s                          Downloading LFS objects:   0% (0/1), 11 MB | 358 KB/s                           Downloading LFS objects:   0% (0/1), 14 MB | 4.1 MB/s                           Downloading LFS objects:   0% (0/1), 18 MB | 4.1 MB/s                           Downloading LFS objects:   0% (0/1), 22 MB | 4.1 MB/s                           Downloading LFS objects:   0% (0/1), 26 MB | 4.1 MB/s                           Downloading LFS objects:   0% (0/1), 28 MB | 4.1 MB/s                           Downloading LFS objects:   0% (0/1), 32 MB | 7.6 MB/s                           Downloading LFS objects:   0% (0/1), 35 MB | 7.6 MB/s                           Downloading LFS objects:   0% (0/1), 37 MB | 7.6 MB/s                           Downloading LFS objects:   0% (0/1), 40 MB | 7.6 MB/s                           Downloading LFS objects:   0% (0/1), 43 MB | 7.6 MB/s                           Downloading LFS objects:   0% (0/1), 47 MB | 8.7 MB/s                           Downloading LFS objects:   0% (0/1), 52 MB | 8.7 MB/s                           Downloading LFS objects:   0% (0/1), 55 MB | 8.7 MB/s                           Downloading LFS objects:   0% (0/1), 59 MB | 8.7 MB/s                           Downloading LFS objects: 100% (1/1), 60 MB | 8.7 MB/s                           mujoco_menagerie not found. Downloading...
-Cloning mujoco_menagerie:           | 0/? [00:00<?]Cloning mujoco_menagerie:           | 1/100 [00:02<04:27]Cloning mujoco_menagerie: ▏         | 2/100 [00:03<02:47]Cloning mujoco_menagerie: ▎         | 3/100 [00:04<02:14]Cloning mujoco_menagerie: ▍         | 4/100 [00:05<01:58]Cloning mujoco_menagerie: ▌         | 5/100 [00:07<02:10]Cloning mujoco_menagerie: █         | 10/100 [00:07<00:38]Cloning mujoco_menagerie: █▏        | 12/100 [00:08<00:40]Cloning mujoco_menagerie: █▎        | 13/100 [00:09<00:47]Cloning mujoco_menagerie: █▍        | 14/100 [00:10<00:55]Cloning mujoco_menagerie: █▌        | 15/100 [00:12<01:07]Cloning mujoco_menagerie: █▌        | 16/100 [00:13<01:24]Cloning mujoco_menagerie: █▋        | 17/100 [00:14<01:23]Cloning mujoco_menagerie: █▊        | 18/100 [00:15<01:16]Cloning mujoco_menagerie: █▉        | 19/100 [00:15<01:00]Cloning mujoco_menagerie: ██        | 20/100 [00:18<01:50]Cloning mujoco_menagerie: ██        | 21/100 [00:19<01:40]Cloning mujoco_menagerie: ██▏       | 22/100 [00:20<01:30]Cloning mujoco_menagerie: ██▎       | 23/100 [00:20<01:06]Cloning mujoco_menagerie: ██▍       | 24/100 [00:21<01:05]Cloning mujoco_menagerie: ██▌       | 25/100 [00:21<00:47]Cloning mujoco_menagerie: ██▌       | 26/100 [00:22<00:48]Cloning mujoco_menagerie: ██▋       | 27/100 [00:22<00:40]Cloning mujoco_menagerie: ██▊       | 28/100 [00:25<01:32]Cloning mujoco_menagerie: ██▉       | 29/100 [00:26<01:25]Cloning mujoco_menagerie: ███       | 30/100 [00:27<01:19]Cloning mujoco_menagerie: ███       | 31/100 [00:28<01:15]Cloning mujoco_menagerie: ███▏      | 32/100 [00:29<01:11]Cloning mujoco_menagerie: ███▍      | 34/100 [00:30<00:56]Cloning mujoco_menagerie: ███▌      | 35/100 [00:32<01:10]Cloning mujoco_menagerie: ███▌      | 36/100 [00:33<01:08]Cloning mujoco_menagerie: ███▋      | 37/100 [00:34<01:02]Cloning mujoco_menagerie: ███▊      | 38/100 [00:34<00:46]Cloning mujoco_menagerie: ████▏     | 42/100 [00:34<00:17]Cloning mujoco_menagerie: ████▌     | 46/100 [00:34<00:09]Cloning mujoco_menagerie: ████▊     | 48/100 [00:34<00:07]Cloning mujoco_menagerie: █████▎    | 53/100 [00:35<00:04]Cloning mujoco_menagerie: █████▋    | 57/100 [00:35<00:03]Cloning mujoco_menagerie: ██████    | 60/100 [00:35<00:02]Cloning mujoco_menagerie: ██████▎   | 63/100 [00:36<00:03]Cloning mujoco_menagerie: ██████▌   | 65/100 [00:37<00:09]Cloning mujoco_menagerie: ██████▋   | 67/100 [00:39<00:11]Cloning mujoco_menagerie: ███████   | 71/100 [00:39<00:06]Cloning mujoco_menagerie: ███████▎  | 73/100 [00:39<00:06]Cloning mujoco_menagerie: ███████▍  | 74/100 [00:40<00:08]Cloning mujoco_menagerie: ███████▌  | 76/100 [00:40<00:06]Cloning mujoco_menagerie: ███████▋  | 77/100 [00:41<00:05]Cloning mujoco_menagerie: ███████▊  | 78/100 [00:41<00:06]Cloning mujoco_menagerie: ████████  | 80/100 [00:43<00:11]Cloning mujoco_menagerie: ████████  | 81/100 [00:44<00:10]Cloning mujoco_menagerie: ████████▏ | 82/100 [00:44<00:08]Cloning mujoco_menagerie: █████████▌| 95/100 [00:44<00:00]Cloning mujoco_menagerie: ██████████| 100/100 [01:00<00:00]Cloning mujoco_menagerie: ██████████| 100/100 [01:04<00:00]
-Checking out commit 1b86ece576591213e2b666ebf59508454200ca97
-Successfully downloaded mujoco_menagerie
-10:37:10.037 [inf][t/unitree/mujoco_connection.py] [mujoco] Downloading LFS objects:   0% (0/1), 0 B | 0 B/s                                Downloading LFS objects:   0% (0/1), 0 B | 0 B/s                                Downloading LFS objects:   0% (0/1), 16 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 33 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 68 KB | 0 B/s                              Downloading LFS objects:   0% (0/1), 138 KB | 0 B/s                             Downloading LFS objects:   0% (0/1), 277 KB | 0 B/s                             Downloading LFS objects:   0% (0/1), 573 KB | 258 KB/s                          Downloading LFS objects:   0% (0/1), 1.1 MB | 258 KB/s                          Downloading LFS objects:   0% (0/1), 2.3 MB | 258 KB/s                          Downloading LFS objects: 100% (1/1), 2.5 MB | 258 KB/s
-10:37:10.199 [err][dimos/protocol/rpc/zenohrpc.py] Exception in RPC handler for G1SimConnection/start: MuJoCo process failed to start (exit code -9)
-10:37:45.852 [err][dimos/protocol/rpc/zenohrpc.py] Exception in RPC handler for G1SimConnection/start: MuJoCo process failed to start (exit code -9)
-10:37:46.585 [inf][dination/module_coordinator.py] Stopping module... module=ObjectTracking
-10:37:47.327 [inf][dination/module_coordinator.py] Module stopped. module=ObjectTracking
-10:37:47.338 [inf][dination/module_coordinator.py] Stopping module... module=SpatialMemory
-10:37:47.409 [inf][dination/module_coordinator.py] Module stopped. module=SpatialMemory
-10:37:47.414 [inf][dination/module_coordinator.py] Stopping module... module=MovementManager
-10:37:47.540 [inf][dination/module_coordinator.py] Module stopped. module=MovementManager
-10:37:47.541 [inf][dination/module_coordinator.py] Stopping module... module=ReplanningAStarPlanner
-10:37:47.686 [inf][dination/module_coordinator.py] Module stopped. module=ReplanningAStarPlanner
-10:37:47.688 [inf][dination/module_coordinator.py] Stopping module... module=G1SimConnection
-10:37:47.731 [inf][dination/module_coordinator.py] Module stopped. module=G1SimConnection
-10:37:47.733 [inf][dination/module_coordinator.py] Stopping module... module=WavefrontFrontierExplorer
-10:37:47.825 [inf][dination/module_coordinator.py] Module stopped. module=WavefrontFrontierExplorer
-10:37:47.839 [inf][dination/module_coordinator.py] Stopping module... module=CostMapper
-10:37:47.887 [inf][dination/module_coordinator.py] Module stopped. module=CostMapper
-10:37:47.893 [inf][dination/module_coordinator.py] Stopping module... module=VoxelGridMapper
-10:37:47.979 [inf][dination/module_coordinator.py] Module stopped. module=VoxelGridMapper
-10:37:47.985 [inf][dination/module_coordinator.py] Stopping module... module=WebsocketVisModule
-10:37:48.021 [inf][dination/module_coordinator.py] Module stopped. module=WebsocketVisModule
-10:37:48.023 [inf][dination/module_coordinator.py] Stopping module... module=RerunWebSocketServer
-10:37:48.077 [inf][dination/module_coordinator.py] Module stopped. module=RerunWebSocketServer
-10:37:48.084 [inf][dination/module_coordinator.py] Stopping module... module=RerunBridgeModule
-10:37:48.145 [inf][dination/module_coordinator.py] Module stopped. module=RerunBridgeModule
-10:37:48.263 [inf][ation/worker_manager_python.py] Shutting down all workers...
-10:37:48.605 [inf][/coordination/python_worker.py] Worker stopping module... module=G1SimConnection module_id=6 worker_id=7
-10:37:48.613 [inf][/coordination/python_worker.py] Worker module stopped. module=G1SimConnection module_id=6 worker_id=7
-10:37:48.012 [inf][/experimental/visual_memory.py] Saved 0 images to /home/ros2/Junction/dimos/assets/output/memory/spatial_memory/visual_memory.pkl
-10:37:48.853 [inf][rimental/spatial_perception.py] Saved 0 images to /home/ros2/Junction/dimos/assets/output/memory/spatial_memory/visual_memory.pkl
-10:37:49.037 [inf][/experimental/visual_memory.py] Visual memory cleared
-10:37:49.923 [inf][/coordination/python_worker.py] Worker stopping module... module=WavefrontFrontierExplorer module_id=5 worker_id=6
-10:37:50.219 [inf][/coordination/python_worker.py] Worker module stopped. module=WavefrontFrontierExplorer module_id=5 worker_id=6
-10:37:50.764 [inf][/coordination/python_worker.py] Worker stopping module... module=CostMapper module_id=4 worker_id=5
-10:37:51.088 [inf][/coordination/python_worker.py] Worker module stopped. module=CostMapper module_id=4 worker_id=5
-10:37:51.781 [inf][experimental/object_tracker.py] Tracking stopped
-10:37:51.598 [inf][/coordination/python_worker.py] Worker stopping module... module=ObjectTracking module_id=10 worker_id=4
-10:37:51.883 [inf][experimental/object_tracker.py] Tracking stopped
-10:37:52.119 [inf][/coordination/python_worker.py] Worker module stopped. module=ObjectTracking module_id=10 worker_id=4
-10:37:52.123 [inf][/coordination/python_worker.py] Worker stopping module... module=VoxelGridMapper module_id=3 worker_id=4
-10:37:52.125 [inf][/coordination/python_worker.py] Worker module stopped. module=VoxelGridMapper module_id=3 worker_id=4
-10:37:52.570 [inf][/coordination/python_worker.py] Worker stopping module... module=MovementManager module_id=8 worker_id=3
-10:37:52.770 [inf][/coordination/python_worker.py] Worker module stopped. module=MovementManager module_id=8 worker_id=3
-10:37:52.773 [inf][/coordination/python_worker.py] Worker stopping module... module=WebsocketVisModule module_id=2 worker_id=3
-10:37:52.773 [inf][/coordination/python_worker.py] Worker module stopped. module=WebsocketVisModule module_id=2 worker_id=3
-10:37:52.996 [inf][/coordination/python_worker.py] Worker stopping module... module=ReplanningAStarPlanner module_id=7 worker_id=2
-10:37:53.027 [inf][/coordination/python_worker.py] Worker module stopped. module=ReplanningAStarPlanner module_id=7 worker_id=2
-10:37:53.028 [inf][/coordination/python_worker.py] Worker stopping module... module=RerunWebSocketServer module_id=1 worker_id=2
-10:37:53.029 [inf][/coordination/python_worker.py] Worker module stopped. module=RerunWebSocketServer module_id=1 worker_id=2
-10:37:53.311 [inf][/coordination/python_worker.py] Worker stopping module... module=SpatialMemory module_id=9 worker_id=1
-10:37:53.340 [inf][/experimental/visual_memory.py] Saved 0 images to /home/ros2/Junction/dimos/assets/output/memory/spatial_memory/visual_memory.pkl
-10:37:53.341 [inf][rimental/spatial_perception.py] Saved 0 images to /home/ros2/Junction/dimos/assets/output/memory/spatial_memory/visual_memory.pkl
-10:37:53.344 [inf][/experimental/visual_memory.py] Visual memory cleared
-10:37:53.347 [inf][/coordination/python_worker.py] Worker module stopped. module=SpatialMemory module_id=9 worker_id=1
-10:37:53.776 [inf][/coordination/python_worker.py] Worker stopping module... module=RerunBridgeModule module_id=0 worker_id=0
-10:37:53.815 [inf][/coordination/python_worker.py] Worker module stopped. module=RerunBridgeModule module_id=0 worker_id=0
-10:37:53.923 [inf][ation/worker_manager_python.py] All workers shut down
-10:37:55.760 [err][dimos/utils/logging_config.py ] Uncaught exception occurred
-╭───────────────────── Traceback (most recent call last) ──────────────────────╮
-│ /home/ros2/Junction/dimos/dimos/utils/cache.py:167 in wrapped                │
-│                                                                              │
-│   164 │   @functools.wraps(function)                                         │
-│   165 │   def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _R:            │
-│   166 │   │   with cache_usage_guard():                                      │
-│ ❱ 167 │   │   │   return function(*args, **kwargs)                           │
-│   168 │                                                                      │
-│   169 │   return wrapped                                                     │
-│   170                                                                        │
-│                                                                              │
-│ /home/ros2/Junction/dimos/dimos/cli/commands/lifecycle.py:318 in run         │
-│                                                                              │
-│   315 │   │   │   coordinator.stop()                                         │
-│   316 │   │   │   raise                                                      │
-│   317 │   else:                                                              │
-│ ❱ 318 │   │   coordinator = ModuleCoordinator.build(blueprint, parsed_config │
-│   319 │   │   entry = RunEntry(                                              │
-│   320 │   │   │   run_id=run_id,                                             │
-│   321 │   │   │   pid=os.getpid(),                                           │
-│                                                                              │
-│ /home/ros2/Junction/dimos/dimos/core/coordination/module_coordinator.py:389  │
-│ in build                                                                     │
-│                                                                              │
-│    386 │   │   │   _connect_module_refs(blueprint, coordinator)              │
-│    387 │   │   │                                                             │
-│    388 │   │   │   coordinator.build_all_modules()                           │
-│ ❱  389 │   │   │   coordinator.start_all_modules()                           │
-│    390 │   │   except BaseException:                                         │
-│    391 │   │   │   # The caller never gets a coordinator to stop, so stop it │
-│    392 │   │   │   with suppress(Exception):                                 │
-│                                                                              │
-│ /home/ros2/Junction/dimos/dimos/core/coordination/module_coordinator.py:270  │
-│ in start_all_modules                                                         │
-│                                                                              │
-│    267 │   │   if not modules:                                               │
-│    268 │   │   │   raise ValueError("No modules deployed. Call deploy() befo │
-│    269 │   │                                                                 │
-│ ❱  270 │   │   safe_thread_map(modules, lambda m: m.start())                 │
-│    271 │   │                                                                 │
-│    272 │   │   self._send_on_system_modules()                                │
-│    273                                                                       │
-│                                                                              │
-│ /home/ros2/Junction/dimos/dimos/utils/safe_thread_map.py:84 in               │
-│ safe_thread_map                                                              │
-│                                                                              │
-│   81 │   │   if on_errors is not None:                                       │
-│   82 │   │   │   zipped = [(items[i], outcomes[i]) for i in range(len(items) │
-│   83 │   │   │   return on_errors(zipped, successes, errors)  # type: ignore │
-│ ❱ 84 │   │   raise ExceptionGroup("safe_thread_map failed", errors)          │
-│   85 │                                                                       │
-│   86 │   return [outcomes[i] for i in range(len(items))]  # type: ignore[mis │
-│   87                                                                         │
-╰──────────────────────────────────────────────────────────────────────────────╯
-ExceptionGroup: safe_thread_map failed (1 sub-exception)
-
-╭────────────────────────────── Sub-exception #1 ──────────────────────────────╮
-│ ╭─────────────────── Traceback (most recent call last) ────────────────────╮ │
-│ │ /home/ros2/Junction/dimos/dimos/utils/safe_thread_map.py:68 in           │ │
-│ │ safe_thread_map                                                          │ │
-│ │                                                                          │ │
-│ │   65 │   │   for fut in as_completed(futures):                           │ │
-│ │   66 │   │   │   idx = futures[fut]                                      │ │
-│ │   67 │   │   │   try:                                                    │ │
-│ │ ❱ 68 │   │   │   │   outcomes[idx] = fut.result()                        │ │
-│ │   69 │   │   │   except Exception as e:                                  │ │
-│ │   70 │   │   │   │   outcomes[idx] = e                                   │ │
-│ │   71                                                                     │ │
-│ │                                                                          │ │
-│ │ /home/ros2/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/p │ │
-│ │ ython3.12/concurrent/futures/_base.py:449 in result                      │ │
-│ │                                                                          │ │
-│ │   446 │   │   │   │   if self._state in [CANCELLED, CANCELLED_AND_NOTIFI │ │
-│ │   447 │   │   │   │   │   raise CancelledError()                         │ │
-│ │   448 │   │   │   │   elif self._state == FINISHED:                      │ │
-│ │ ❱ 449 │   │   │   │   │   return self.__get_result()                     │ │
-│ │   450 │   │   │   │                                                      │ │
-│ │   451 │   │   │   │   self._condition.wait(timeout)                      │ │
-│ │   452                                                                    │ │
-│ │                                                                          │ │
-│ │ /home/ros2/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/p │ │
-│ │ ython3.12/concurrent/futures/_base.py:401 in __get_result                │ │
-│ │                                                                          │ │
-│ │   398 │   def __get_result(self):                                        │ │
-│ │   399 │   │   if self._exception:                                        │ │
-│ │   400 │   │   │   try:                                                   │ │
-│ │ ❱ 401 │   │   │   │   raise self._exception                              │ │
-│ │   402 │   │   │   finally:                                               │ │
-│ │   403 │   │   │   │   # Break a reference cycle with the exception in se │ │
-│ │   404 │   │   │   │   self = None                                        │ │
-│ │                                                                          │ │
-│ │ /home/ros2/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/p │ │
-│ │ ython3.12/concurrent/futures/thread.py:59 in run                         │ │
-│ │                                                                          │ │
-│ │    56 │   │   │   return                                                 │ │
-│ │    57 │   │                                                              │ │
-│ │    58 │   │   try:                                                       │ │
-│ │ ❱  59 │   │   │   result = self.fn(*self.args, **self.kwargs)            │ │
-│ │    60 │   │   except BaseException as exc:                               │ │
-│ │    61 │   │   │   self.future.set_exception(exc)                         │ │
-│ │    62 │   │   │   # Break a reference cycle with the exception 'exc'     │ │
-│ │                                                                          │ │
-│ │ /home/ros2/Junction/dimos/dimos/core/coordination/module_coordinator.py: │ │
-│ │ 270 in <lambda>                                                          │ │
-│ │                                                                          │ │
-│ │    267 │   │   if not modules:                                           │ │
-│ │    268 │   │   │   raise ValueError("No modules deployed. Call deploy()  │ │
-│ │    269 │   │                                                             │ │
-│ │ ❱  270 │   │   safe_thread_map(modules, lambda m: m.start())             │ │
-│ │    271 │   │                                                             │ │
-│ │    272 │   │   self._send_on_system_modules()                            │ │
-│ │    273                                                                   │ │
-│ │                                                                          │ │
-│ │ /home/ros2/Junction/dimos/dimos/core/rpc_client.py:93 in __call__        │ │
-│ │                                                                          │ │
-│ │    90 │   │   │   │   self._stop_rpc_client()                            │ │
-│ │    91 │   │   │   return None                                            │ │
-│ │    92 │   │                                                              │ │
-│ │ ❱  93 │   │   result, unsub_fn = self._rpc.call_sync(                    │ │
-│ │    94 │   │   │   f"{self._remote_name}/{self._name}",                   │ │
-│ │    95 │   │   │   (args, kwargs),  # type: ignore[arg-type]              │ │
-│ │    96 │   │   )                                                          │ │
-│ │                                                                          │ │
-│ │ /home/ros2/Junction/dimos/dimos/protocol/rpc/spec.py:88 in call_sync     │ │
-│ │                                                                          │ │
-│ │    85 │   │   # Check if the result is an exception and raise it         │ │
-│ │    86 │   │   result = event.result  # type: ignore[attr-defined]        │ │
-│ │    87 │   │   if isinstance(result, BaseException):                      │ │
-│ │ ❱  88 │   │   │   raise result                                           │ │
-│ │    89 │   │                                                              │ │
-│ │    90 │   │   return result, unsub_fn                                    │ │
-│ │    91                                                                    │ │
-│ ╰──────────────────────────────────────────────────────────────────────────╯ │
-│ RuntimeError: MuJoCo process failed to start (exit code -9)                  │
-╰──────────────────────────────────────────────────────────────────────────────╯
