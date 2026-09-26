@@ -1,0 +1,5 @@
+path: /home/ros2/Junction/okra_robot/dataset/yolo_s02
+train: images/train
+val: images/val
+names:
+  0: okra

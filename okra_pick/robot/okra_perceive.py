@@ -3,15 +3,22 @@
 Find one okra pod and write its position in the robot's pelvis frame. Runs ON THE ROBOT (Orin),
 conda env g1brainco (Python 3.8: torch+CUDA, ultralytics, pyrealsense2, unitree_sdk2py).
 
-    python okra_perceive.py --out target.json [--frames 15] [--timeout 25]
-    python okra_perceive.py --floor-check          # camera extrinsic sanity check, no detection
+    python okra_perceive.py --event-dir DIR [--frames 15]   # one "look": evidence bundle for the HITL step
+    python okra_perceive.py --floor-check                    # camera extrinsic sanity check, no detection
 
 Needs the head RealSense free (Unitree videohub stopped: okra_pick.sh does that).
 
-Per frame: colour + depth aligned to colour (pyrealsense2) -> OkraDetector (GPU) -> accepted pods
-with xyz_m (camera optical frame) -> pod long axis from the mask -> pelvis frame via the URDF chain and
-the live waist angles from rt/lowstate. The first pod seen inside the reach zone is tracked; after
---frames consistent sightings (within MATCH_M) the median is written as target.json.
+Per frame: colour + depth aligned to colour (pyrealsense2) -> OkraDetector (GPU) with a LOW confidence
+floor and the filter's rejections kept -> each detection's 3D point and pod axis in the pelvis frame
+(URDF chain + live waist angles). Observations are merged into candidates (candidates.py).
+
+It does NOT choose a target: the VM decides with the human-in-the-loop policy (okra_pick/hitl).
+Event bundle written to --event-dir:
+  frames/NNN.jpg        every colour frame (JPEG 95)
+  depth_key.npz         depth of the last frame, uint16 millimetres
+  candidates.json       all candidates with statistics, key/best masks, pelvis xyz, axis, reach
+  robot_state.json      29 joint angles, IMU rpy, waist, camera intrinsics and pelvis<-camera transform
+  annotated.jpg         last frame with every candidate numbered
 """
 
 import argparse
@@ -28,11 +35,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "okra_robot"))       # detector copied next to this folder
 import pick_config as C                                            # noqa: E402
+from candidates import Candidates                                  # noqa: E402
 from g1_chain import Chain, T_pelvis_optical                       # noqa: E402
 
 POD_RADIUS = 0.01      # m: the mask depth is the pod's front surface; its axis is ~1 cm further
-MATCH_M = 0.03         # m: sightings closer than this to the tracked pod count as the same pod
-MAX_SPREAD = 0.02      # m: refuse if the sightings disagree more than this
+CAND_CONF = 0.10       # detector confidence floor for candidates (the filter's own threshold is higher)
 
 
 class LowState:
@@ -134,11 +141,21 @@ def floor_check(pipe, align, scale, intr, chain, ls):
                       "imu_rpy_deg": [float(np.degrees(x)) for x in ls.rpy()], "points": int(len(P))}, indent=1))
 
 
+def annotate(color, cands):
+    img = color.copy()
+    for c in cands:
+        col = (0, 200, 0) if c["in_reach"] else (0, 200, 255)
+        cv2.polylines(img, [np.asarray(c["key_mask"], np.int32)], True, col, 2)
+        x, y = int(c["px"][0]), int(c["px"][1])
+        cv2.putText(img, "%d" % c["id"], (x + 8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4)
+        cv2.putText(img, "%d" % c["id"], (x + 8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, col, 2)
+    return img
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="target.json")
+    ap.add_argument("--event-dir", default="event")
     ap.add_argument("--frames", type=int, default=15)
-    ap.add_argument("--timeout", type=float, default=25.0)
     ap.add_argument("--iface", default="eth0")
     ap.add_argument("--weights", default=None)
     ap.add_argument("--floor-check", action="store_true")
@@ -159,71 +176,52 @@ def main():
             return
 
         from okra_detector import OkraDetector
-        det = OkraDetector(args.weights, stream=True)
-        print("detector %s, camera fx %.1f fy %.1f pp (%.1f, %.1f)" % (det.weights.name, *K), flush=True)
-        track, seen, last = None, [], None
-        t0 = time.time()
-        while len(seen) < args.frames and time.time() - t0 < args.timeout:
+        det = OkraDetector(args.weights, stream=True, conf=CAND_CONF)
+        out = args.event_dir
+        os.makedirs(os.path.join(out, "frames"), exist_ok=True)
+        print("detector %s (floor %.2f), camera fx %.1f fy %.1f pp (%.1f, %.1f)" % (det.weights.name, CAND_CONF, *K), flush=True)
+        cands = Candidates(args.frames)
+        q = None
+        for f in range(args.frames):
             color, depth = grab(pipe, align, scale)
-            q = ls.q()
-            if q is None:
-                continue
+            q = ls.q() or q
             T = T_pelvis_optical(chain, q[12:15])
-            cands = []
-            for d in det.detect(color, depth_m=depth, intrinsics=K):
-                if "xyz_m" not in d:
-                    continue
-                ray = np.array(d["xyz_m"]) / np.linalg.norm(d["xyz_m"])
-                pc = np.array(d["xyz_m"]) + POD_RADIUS * ray
-                p = T[:3, :3] @ pc + T[:3, 3]
-                ax_c = pod_axis_cam(d["mask"], depth, K, d["depth_m"])
-                ax = T[:3, :3] @ ax_c if ax_c is not None else None
-                if ax is not None and ax[2] < 0:
-                    ax = -ax                                    # point the axis upwards, by convention
-                cands.append(dict(d, p=p, axis=ax))
-            if track is None:
-                reach = [c for c in cands if in_reach(c["p"])]
-                if reach:
-                    track = max(reach, key=lambda c: c["conf"])["p"]
-                elif cands:
-                    print("pods seen, none in reach: %s" % [np.round(c["p"], 2).tolist() for c in cands], flush=True)
-            if track is not None:
-                near = [c for c in cands if np.linalg.norm(c["p"] - track) < MATCH_M]
-                if near:
-                    c = min(near, key=lambda c: np.linalg.norm(c["p"] - track))
-                    seen.append((c, q))
-                    last = (color, c)
-                    print("sighting %d/%d  pelvis xyz %s  conf %.2f  len %.0f cm" % (
-                        len(seen), args.frames, np.round(c["p"], 3).tolist(), c["conf"],
-                        100 * (c.get("length_m") or 0)), flush=True)
+            cv2.imwrite(os.path.join(out, "frames", "%03d.jpg" % f), color, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            obs = []
+            for d in det.detect(color, depth_m=depth, intrinsics=K, return_rejected=True):
+                o = {k: d[k] for k in ("cx", "cy", "conf", "accepted", "reason", "box")}
+                o["mask"] = np.asarray(d["mask"]).tolist()
+                if "xyz_m" in d:
+                    ray = np.array(d["xyz_m"]) / np.linalg.norm(d["xyz_m"])
+                    o["p"] = (T[:3, :3] @ (np.array(d["xyz_m"]) + POD_RADIUS * ray) + T[:3, 3]).tolist()
+                    ax = pod_axis_cam(d["mask"], depth, K, d["depth_m"])
+                    if ax is not None:
+                        ax = T[:3, :3] @ ax
+                        o["axis"] = (ax if ax[2] >= 0 else -ax).tolist()
+                    o["length_m"] = d.get("length_m")
+                obs.append(o)
+            cands.add_frame(f, obs)
+            print("frame %d/%d: %d detections" % (f + 1, args.frames, len(obs)), flush=True)
+        key_color, key_depth = color, depth
     finally:
         pipe.stop()
 
-    if len(seen) < args.frames:
-        sys.exit("NO TARGET: %d/%d sightings in %.0f s" % (len(seen), args.frames, args.timeout))
-    P = np.array([c["p"] for c, _ in seen])
-    med = np.median(P, axis=0)
-    spread = float(np.max(np.linalg.norm(P - med, axis=1)))
-    axes = np.array([c["axis"] for c, _ in seen if c["axis"] is not None])
-    axis = None
-    if len(axes):
-        axis = np.median(axes, axis=0)
-        axis = (axis / np.linalg.norm(axis)).tolist()
-    target = {"xyz_pelvis": med.tolist(), "axis_pelvis": axis, "spread_m": spread, "n": len(seen),
-              "conf": float(np.median([c["conf"] for c, _ in seen])),
-              "length_m": float(np.median([c.get("length_m") or 0 for c, _ in seen])),
-              "q": seen[-1][1], "time": time.time(), "intrinsics": K, "source": "okra_perceive"}
-    color, c = last
-    cv2.polylines(color, [np.asarray(c["mask"], np.int32)], True, (0, 255, 0), 2)
-    cv2.circle(color, (int(c["cx"]), int(c["cy"])), 5, (0, 0, 255), -1)
-    cv2.putText(color, "okra %.2f  pelvis %s" % (c["conf"], np.round(med, 2).tolist()), (10, 25),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    cv2.imwrite(os.path.splitext(args.out)[0] + ".jpg", color)
-    json.dump(target, open(args.out, "w"), indent=1)
-    if spread > MAX_SPREAD:
-        sys.exit("UNSTABLE TARGET: sightings spread %.1f cm (max %.0f)" % (spread * 100, MAX_SPREAD * 100))
-    print("TARGET %s (spread %.1f cm, axis %s) -> %s" % (np.round(med, 3).tolist(), spread * 100,
-                                                          None if axis is None else np.round(axis, 2).tolist(), args.out))
+    summary = cands.summary(in_reach)
+    json.dump({"candidates": summary, "frames": args.frames, "conf_floor": CAND_CONF,
+               "detector": det.weights.name, "time": time.time()},
+              open(os.path.join(out, "candidates.json"), "w"))
+    np.savez_compressed(os.path.join(out, "depth_key.npz"), depth_mm=np.round(key_depth * 1000).astype(np.uint16))
+    T = T_pelvis_optical(chain, q[12:15])
+    json.dump({"q": q, "imu_rpy": ls.rpy(), "waist": q[12:15], "intrinsics": {"fx": K[0], "fy": K[1], "ppx": K[2], "ppy": K[3],
+               "width": 640, "height": 480}, "T_pelvis_optical": T.tolist(), "time": time.time()},
+              open(os.path.join(out, "robot_state.json"), "w"), indent=1)
+    cv2.imwrite(os.path.join(out, "annotated.jpg"), annotate(key_color, summary))
+    for c in summary:
+        print("candidate %d: conf med %.2f max %.2f, seen %.0f%%, filter ok %.0f%% %s, xyz %s, reach %s" % (
+            c["id"], c["conf_median"], c["conf_max"], 100 * c["seen_frac"], 100 * c["accepted_frac"],
+            c["reject_reasons"] or "", None if c["xyz_pelvis"] is None else np.round(c["xyz_pelvis"], 3).tolist(),
+            c["in_reach"]))
+    print("EVENT %s: %d candidates" % (out, len(summary)))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""
+g1ctl: talk to the G1 robot agent (agent.py on the Orin) from the VM. Standard library only.
+
+    g1ctl status                       instant state: FSM, mode, tilt, knee load, gripper, balance check
+    g1ctl watch [HZ]                   live state stream (Ctrl-C to quit)
+    g1ctl stop                         zero velocity + cancel the running motion (always accepted)
+    g1ctl ai | damp | ready | start    mode switches (start has the balance gate)
+    g1ctl zero --confirm               zero torque (robot goes limp: only when it is supported)
+    g1ctl step VY [VX] [DUR] [WZ]      walk: +VY left, +VX forward (m/s), DUR s, WZ rad/s turn
+    g1ctl left|right|forward|back CM   step by distance at 0.1 m/s (e.g. g1ctl left 20)
+    g1ctl head YAW [PITCH] [HOLD] [SPEED]   waist move from the current pose (+yaw left, +pitch down), rad
+    g1ctl gripper open|close|Q         Dex1 right gripper
+    g1ctl say "TEXT"                   speak through the robot's speaker
+    g1ctl led R G B                    head LED colour (0-255)
+    g1ctl ping                         round-trip time
+
+Env: G1_AGENT=host:port (default 192.168.123.164:7777).
+"""
+
+import json
+import os
+import socket
+import sys
+import time
+
+ADDR = os.environ.get("G1_AGENT", "192.168.123.164:7777")
+
+
+def connect():
+    host, port = ADDR.rsplit(":", 1)
+    s = socket.create_connection((host, int(port)), timeout=5)
+    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    s.settimeout(None)
+    return s, s.makefile("r")
+
+
+def call(cmd, args=None, quiet=False):
+    t0 = time.time()
+    try:
+        s, f = connect()
+    except OSError as e:
+        sys.exit("cannot reach the agent at %s: %s (is it running? ./agent.sh start)" % (ADDR, e))
+    s.sendall((json.dumps({"id": 1, "cmd": cmd, "args": args or {}}) + "\n").encode())
+    for line in f:
+        msg = json.loads(line)
+        if "log" in msg:
+            if not quiet:
+                print("  " + msg["log"], flush=True)
+            continue
+        dt = (time.time() - t0) * 1000
+        if msg.get("ok"):
+            if not quiet:
+                print(json.dumps(msg["result"], indent=1))
+                print("ok (%.0f ms)" % dt)
+            return msg["result"]
+        print("ERROR: %s (%.0f ms)" % (msg.get("error"), dt))
+        sys.exit(1)
+    sys.exit("connection closed without a reply")
+
+
+def watch(hz):
+    s, f = connect()
+    s.sendall((json.dumps({"cmd": "watch", "args": {"hz": hz}}) + "\n").encode())
+    try:
+        for line in f:
+            st = json.loads(line)["state"]
+            print("\rFSM %-4s %-14s roll %+5.1f pitch %+5.1f  knees %5.1f Nm  grip %-5s  %4s Hz  %-8s %s   " % (
+                st.get("fsm"), st.get("fsm_name"), st.get("roll_deg", 0), st.get("pitch_deg", 0),
+                st.get("knee_load", 0), st.get("gripper_q"), st.get("lowstate_hz"), st.get("busy") or "idle",
+                "BALANCED" if st.get("balance_ok") else "not balanced"), end="", flush=True)
+    except KeyboardInterrupt:
+        print()
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return
+    c, rest = a[0], a[1:]
+    num = [float(x) for x in rest if x.replace(".", "", 1).lstrip("-").isdigit()]
+    if c == "watch":
+        watch(num[0] if num else 10)
+    elif c in ("status", "stop", "ping", "ai", "damp", "ready", "start"):
+        call(c)
+    elif c == "zero":
+        call("zero", {"confirm": "--confirm" in rest})
+    elif c == "step":
+        keys = ["vy", "vx", "dur", "wz"]
+        call("step", dict(zip(keys, num)))
+    elif c in ("left", "right", "forward", "back"):
+        cm = num[0] if num else 10
+        dur, v = cm / 100.0 / 0.1, 0.1
+        if dur > 2.0:
+            dur, v = 2.0, cm / 100.0 / 2.0
+        if v > 0.2:
+            sys.exit("max %.0f cm per command" % (0.2 * 2.0 * 100))
+        sign = 1 if c in ("left", "forward") else -1
+        call("step", {"vy" if c in ("left", "right") else "vx": sign * v, "dur": round(dur, 2)})
+    elif c == "head":
+        keys = ["yaw", "pitch", "hold", "speed"]
+        call("head", dict(zip(keys, num)))
+    elif c == "say":
+        call("say", {"text": " ".join(rest)})
+    elif c == "led":
+        call("led", {"rgb": [int(x) for x in num[:3]]})
+    elif c == "gripper":
+        call("gripper", {"pos": rest[0] if rest else "open"})
+    else:
+        sys.exit("unknown command %r (g1ctl help)" % c)
+
+
+if __name__ == "__main__":
+    main()

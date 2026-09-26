@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G1 Okra Operator</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --ink:#1d2330; --mute:#667085; --line:#dde1e7; --ok:#12a150; --warn:#e8900c;
+          --bad:#d92d20; --acc:#2563eb; --okra:#3f8f1f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12151b; --card:#1b2029; --ink:#e7eaf0; --mute:#98a2b3;
+          --line:#2c3340; --acc:#6ea0ff; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+           padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0 12px 0 0; }
+  .pill { padding:3px 10px; border-radius:99px; font-size:13px; background:var(--bg); border:1px solid var(--line); white-space:nowrap; }
+  .pill.ok { color:#fff; background:var(--ok); border-color:var(--ok); }
+  .pill.warn { color:#fff; background:var(--warn); border-color:var(--warn); }
+  .pill.bad { color:#fff; background:var(--bad); border-color:var(--bad); }
+  #stop { margin-left:auto; font:700 20px system-ui; color:#fff; background:var(--bad); border:0; border-radius:10px;
+          padding:12px 30px; cursor:pointer; box-shadow:0 2px 0 #8a1c14; }
+  #stop:active { transform:translateY(2px); box-shadow:none; }
+  main { display:grid; grid-template-columns: 300px 1fr 360px; gap:14px; padding:14px 16px; }
+  @media (max-width: 1150px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
+  .card h2 { font-size:15px; margin:0 0 10px; }
+  .card h3 { font-size:13px; margin:14px 0 6px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; }
+  button { font:inherit; padding:8px 12px; border-radius:8px; border:1px solid var(--line); background:var(--bg);
+           color:var(--ink); cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--acc); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); }
+  button.go { background:var(--ok); color:#fff; border-color:var(--ok); }
+  button.danger { background:var(--bad); color:#fff; border-color:var(--bad); }
+  .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .grid3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+  .grid3 button { padding:10px 0; }
+  select, input[type=text] { font:inherit; padding:7px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap:2px 10px; font-size:14px; }
+  .kv b { color:var(--mute); font-weight:500; }
+  .steps { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .step { flex:1; min-width:90px; text-align:center; font-size:13px; padding:6px; border-radius:8px; background:var(--bg); color:var(--mute); }
+  .step.done { background:var(--ok); color:#fff; } .step.now { background:var(--acc); color:#fff; }
+  .imgwrap { position:relative; width:100%; max-width:720px; }
+  .imgwrap img { width:100%; display:block; border-radius:8px; }
+  .imgwrap svg { position:absolute; inset:0; width:100%; height:100%; }
+  .imgwrap polygon { fill:transparent; stroke:transparent; stroke-width:6; cursor:pointer; }
+  .imgwrap polygon.sel { fill:rgba(63,143,31,.35); stroke:var(--okra); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+  .chip { padding:6px 10px; border-radius:8px; border:2px solid var(--line); cursor:pointer; font-size:14px; }
+  .chip.sel { border-color:var(--okra); background:rgba(63,143,31,.15); }
+  .reasons { margin:6px 0 10px; padding-left:18px; color:var(--warn); }
+  .note { color:var(--mute); font-size:13px; }
+  pre#log { background:#0d1117; color:#c9d1d9; border-radius:8px; padding:10px; height:300px; overflow:auto;
+            font:12px/1.35 ui-monospace, monospace; margin:0; white-space:pre-wrap; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { padding:4px 6px; border-bottom:1px solid var(--line); text-align:left; }
+  tr.click { cursor:pointer; } tr.click:hover { background:var(--bg); }
+  video { width:100%; border-radius:8px; margin-top:8px; }
+  .hidden { display:none !important; }
+  .banner { padding:10px; border-radius:8px; margin:8px 0; }
+  .banner.ok { background:rgba(18,161,80,.12); } .banner.warn { background:rgba(232,144,12,.15); } .banner.bad { background:rgba(217,45,32,.12); }
+</style>
+</head>
+<body>
+<header>
+  <h1>G1 Okra Operator</h1>
+  <span id="p_agent" class="pill">agent …</span>
+  <span id="p_fsm" class="pill">FSM …</span>
+  <span id="p_bal" class="pill">balance …</span>
+  <span id="p_tilt" class="pill">tilt …</span>
+  <span id="p_knee" class="pill">knees …</span>
+  <span id="p_grip" class="pill">gripper …</span>
+  <span id="p_rec" class="pill">rec …</span>
+  <span id="p_busy" class="pill">idle</span>
+  <button id="stop" title="Zero velocity + cancel the running motion (key: Esc)">STOP</button>
+</header>
+
+<main>
+  <!-- ============ left: robot control -->
+  <section>
+    <div class="card">
+      <h2>Robot</h2>
+      <div class="row"><button onclick="agent('start')">Start agent</button><button onclick="agent('restart')">Restart agent</button></div>
+      <h3>Bring-up</h3>
+      <div class="row">
+        <button onclick="robotConfirm('ai','Switch the robot to AI mode (after a reboot)?')">AI mode</button>
+        <button onclick="robotConfirm('damp','Damp: joints go soft. Robot must be supported. Continue?')">Damp</button>
+        <button onclick="robotConfirm('ready','Locked stand: the LEGS WILL MOVE. Robot must hang freely on the gantry. Continue?')">Ready</button>
+        <button class="go" onclick="robotConfirm('start','Start balance (FSM 200): feet flat, upright, rope slack, e-stop ready?')">Start balance</button>
+      </div>
+      <h3>Walk</h3>
+      <div class="row" style="margin-bottom:6px">distance <select id="dist"><option>5</option><option selected>10</option><option>20</option><option>30</option><option>40</option></select> cm</div>
+      <div class="grid3">
+        <span></span><button onclick="walk('forward')">▲ fwd</button><span></span>
+        <button onclick="walk('left')">◀ left</button><span></span><button onclick="walk('right')">right ▶</button>
+        <span></span><button onclick="walk('back')">▼ back</button><span></span>
+      </div>
+      <h3>Look (waist)</h3>
+      <div class="grid3">
+        <span></span><button onclick="look(0,-0.1)">up</button><span></span>
+        <button onclick="look(0.2,0)">left</button><span class="note" style="text-align:center">3 s, back</span><button onclick="look(-0.2,0)">right</button>
+        <span></span><button onclick="look(0,0.1)">down</button><span></span>
+      </div>
+      <h3>Gripper</h3>
+      <div class="row"><button onclick="robot('gripper',{pos:'open'})">Open</button><button onclick="robot('gripper',{pos:'close'})">Close</button></div>
+      <h3>Recording</h3>
+      <div class="row"><button onclick="post('/api/record',{action:'start'})">● Start</button><button onclick="post('/api/record',{action:'stop'})">■ Stop</button></div>
+      <h3>Say</h3>
+      <div class="row"><input id="saytext" type="text" placeholder="text" style="flex:1"><button onclick="robot('say',{text:el('saytext').value})">Say</button></div>
+    </div>
+  </section>
+
+  <!-- ============ centre: okra workflow -->
+  <section>
+    <div class="card">
+      <h2>Okra pick</h2>
+      <div class="steps" id="steps">
+        <div class="step" data-s="look">1 Look</div><div class="step" data-s="ask">2 Is it okra?</div>
+        <div class="step" data-s="plan">3 Plan</div><div class="step" data-s="move">4 Reach / Pick</div>
+        <div class="step" data-s="outcome">5 Outcome</div>
+      </div>
+
+      <div class="row">
+        <select id="mode"><option value="">ask when unsure</option><option value="always">always ask</option></select>
+        <button class="primary" id="b_look" onclick="post('/api/look',{mode:el('mode').value})">1 · Look for okra</button>
+        <span class="note" id="evid"></span>
+      </div>
+
+      <div id="askpane" class="hidden">
+        <h3>2 · Is it okra?</h3>
+        <ul class="reasons" id="reasons"></ul>
+        <div class="imgwrap"><img id="qimg" alt="what the robot sees"><svg id="qsvg" viewBox="0 0 640 480"></svg></div>
+        <div class="note">Click the pods that ARE okra (on the image or below). Green number = within reach, orange = out of reach.</div>
+        <div class="chips" id="chips"></div>
+        <div class="row">
+          <button class="go" onclick="answer('ids')">Selected are okra</button>
+          <button onclick="answer('n')">None is okra</button>
+          <button onclick="answer('m')">It missed an okra</button>
+          <button onclick="answer('s')">Not sure</button>
+        </div>
+      </div>
+
+      <div id="decpane" class="hidden"></div>
+
+      <div id="planpane" class="hidden">
+        <h3>3 · Plan</h3>
+        <div class="row"><button class="primary" onclick="post('/api/plan',{})">Plan grasp + simulation</button><span class="note" id="plansum"></span></div>
+        <video id="simvid" controls loop muted class="hidden"></video>
+      </div>
+
+      <div id="movepane" class="hidden">
+        <h3>4 · Execute</h3>
+        <div class="row">
+          <button onclick="post('/api/execute',{kind:'dry'})">Dry run (checks only)</button>
+          <button class="primary" onclick="execute('reach')">Reach test (no grasp)</button>
+          <button class="danger" onclick="execute('pick')">PICK</button>
+        </div>
+        <div class="note">Reach/Pick start a recording automatically. Keep the e-stop in hand; STOP (Esc) cancels.</div>
+      </div>
+
+      <div id="outpane" class="hidden">
+        <h3>5 · Did it pick the okra?</h3>
+        <div class="row">
+          <input id="onote" type="text" placeholder="note (optional)" style="flex:1">
+          <button class="go" onclick="outcome('success')">Yes</button>
+          <button onclick="outcome('partial')">Partly</button>
+          <button class="danger" onclick="outcome('fail')">No</button>
+        </div>
+        <div id="outres" class="note"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ right: log + history -->
+  <section>
+    <div class="card"><h2>Log <span class="note" id="jobname"></span></h2><pre id="log"></pre></div>
+    <div class="card">
+      <h2>History</h2>
+      <div class="row" style="margin-bottom:8px"><button onclick="post('/api/dataset',{})">Export training set</button><button onclick="loadEvents()">Refresh</button></div>
+      <table><thead><tr><th>event</th><th>asked</th><th>answer</th><th>okra</th><th>outcome</th></tr></thead><tbody id="hist"></tbody></table>
+    </div>
+  </section>
+</main>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const el = id => document.getElementById(id);
+const fileUrl = (p, bust) => p + '?' + [TOKEN ? 'token=' + TOKEN : '', bust ? 't=' + Date.now() : ''].filter(Boolean).join('&');
+let S = null, lastKey = '', selected = new Set();
+
+async function api(path, body) {
+  const r = await fetch(path + (TOKEN && body === undefined ? '?token=' + TOKEN : ''), body === undefined ?
+    { headers: { 'X-Token': TOKEN } } :
+    { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, body: JSON.stringify(body) });
+  return r.json();
+}
+function logLocal(msg) { const L = el('log'); L.textContent += '\n' + msg; L.scrollTop = L.scrollHeight; }
+async function post(path, body) {
+  const r = await api(path, body);
+  if (r.ok === false || r.error) logLocal('ERROR: ' + (r.error || 'failed'));
+  return r;
+}
+async function robot(cmd, args) {
+  logLocal('> ' + cmd + ' ' + JSON.stringify(args || {}));
+  const r = await post('/api/robot', { cmd, args: args || {} });
+  (r.log || []).forEach(l => logLocal('  ' + l));
+  if (r.ok) logLocal('  ok ' + JSON.stringify(r.result));
+  return r;
+}
+function robotConfirm(cmd, q) { if (confirm(q)) robot(cmd); }
+function agent(action) { post('/api/agent', { action }); }
+function walk(dir) {
+  const cm = +el('dist').value; let dur = cm / 10, v = 0.1;
+  if (dur > 2) { dur = 2; v = cm / 200; }
+  const s = (dir === 'left' || dir === 'forward') ? 1 : -1;
+  const args = { dur: +dur.toFixed(2) }; args[(dir === 'left' || dir === 'right') ? 'vy' : 'vx'] = s * v;
+  robot('step', args);
+}
+function look(yaw, pitch) { robot('head', { yaw, pitch, hold: 3, speed: 0.25 }); }
+function execute(kind) {
+  const word = kind.toUpperCase();
+  const t = prompt(`The ARM WILL MOVE (${kind}). Area clear, e-stop in hand?\nType ${word} to continue:`);
+  if (t === word) post('/api/execute', { kind, confirm: word });
+}
+async function answer(kind) {
+  let a = kind;
+  if (kind === 'ids') { if (!selected.size) { alert('Select the okra first (click it)'); return; } a = [...selected].sort().join(','); }
+  const r = await post('/api/answer', { answer: a, operator: localStorage.getItem('operator') || '' });
+  if (r.ok) { selected.clear(); lastKey = ''; logLocal('answer ' + a + ' -> target ' + r.decision.target); }
+}
+async function outcome(result) {
+  const r = await post('/api/outcome', { result, note: el('onote').value });
+  if (r.ok) { el('outres').textContent = 'recorded: ' + result; loadEvents(); }
+}
+el('stop').onclick = () => robot('stop');
+document.addEventListener('keydown', e => { if (e.key === 'Escape') robot('stop'); });
+
+function pill(id, text, cls) { const p = el(id); p.textContent = text; p.className = 'pill ' + (cls || ''); }
+
+function renderHeader() {
+  const r = S.robot;
+  if (!r) { pill('p_agent', 'agent offline', 'bad'); ['p_fsm','p_bal','p_tilt','p_knee','p_grip'].forEach(i => pill(i, '—')); }
+  else {
+    pill('p_agent', 'agent ' + r.lowstate_hz + ' Hz', 'ok');
+    pill('p_fsm', 'FSM ' + r.fsm + ' ' + r.fsm_name, [200,500,501].includes(r.fsm) ? 'ok' : 'warn');
+    pill('p_bal', r.balance_ok ? 'balanced' : 'not balanced', r.balance_ok ? 'ok' : 'warn');
+    pill('p_tilt', `roll ${(r.roll_deg ?? 0).toFixed(1)}° pitch ${(r.pitch_deg ?? 0).toFixed(1)}°`,
+         Math.max(Math.abs(r.roll_deg || 0), Math.abs(r.pitch_deg || 0)) > 5 ? 'bad' : '');
+    pill('p_knee', 'knees ' + (r.knee_load ?? '—') + ' Nm');
+    pill('p_grip', 'gripper ' + (r.gripper_q ?? '—'));
+  }
+  pill('p_rec', S.recording || 'rec ?', (S.recording || '').startsWith('RECORDING') ? 'bad' : '');
+  const busy = (r && r.busy) || (S.job.running && S.job.name);
+  pill('p_busy', busy ? 'busy: ' + busy : 'idle', busy ? 'warn' : '');
+  el('b_look').disabled = S.job.running;
+}
+
+function renderLog() {
+  const L = el('log'), atEnd = L.scrollTop + L.clientHeight >= L.scrollHeight - 20;
+  const txt = S.job.log.join('\n');
+  if (L.dataset.src !== txt) { L.textContent = txt; L.dataset.src = txt; if (atEnd) L.scrollTop = L.scrollHeight; }
+  el('jobname').textContent = S.job.name ? `(${S.job.name}${S.job.running ? ', running' : ', exit ' + S.job.rc})` : '';
+}
+
+function setSteps(now, done) {
+  document.querySelectorAll('.step').forEach(s => {
+    s.className = 'step' + (done.includes(s.dataset.s) ? ' done' : '') + (s.dataset.s === now ? ' now' : '');
+  });
+}
+
+function renderEvent() {
+  const e = S.event;
+  const key = e ? JSON.stringify([e.id, !!e.pending, e.decision && e.decision.answer_raw, e.target, e.plan, !!e.executed, e.outcome, e.files]) : '';
+  if (key === lastKey) return;
+  lastKey = key;
+  ['askpane','decpane','planpane','movepane','outpane'].forEach(p => el(p).classList.add('hidden'));
+  el('evid').textContent = e ? 'event ' + e.id : 'no event yet';
+  if (!e) { setSteps('look', []); return; }
+  const done = ['look'];
+  if (e.pending) {
+    setSteps('ask', done);
+    el('askpane').classList.remove('hidden');
+    el('reasons').innerHTML = e.pending.reasons.map(r => `<li>${r}</li>`).join('');
+    el('qimg').src = fileUrl(e.files['question_view.jpg'] || e.files['question.jpg'], true);
+    const shown = e.candidates.filter(c => e.pending.shown.includes(c.id));
+    el('qsvg').innerHTML = shown.map(c => `<polygon data-id="${c.id}" points="${c.key_mask.map(p => p.join(',')).join(' ')}"/>`).join('');
+    el('qsvg').querySelectorAll('polygon').forEach(p => p.onclick = () => toggle(+p.dataset.id));
+    el('chips').innerHTML = shown.map(c => `<span class="chip" data-id="${c.id}">#${c.id} · conf ${c.conf_median.toFixed(2)} · ${c.in_reach ? 'in reach' : 'out of reach'}</span>`).join('')
+      || '<span class="note">No candidates marked. If you can see an okra, press “It missed an okra”.</span>';
+    el('chips').querySelectorAll('.chip').forEach(c => c.onclick = () => toggle(+c.dataset.id));
+    refreshSel();
+    return;
+  }
+  const d = e.decision;
+  if (d) {
+    done.push('ask');
+    const pane = el('decpane'); pane.classList.remove('hidden');
+    let cls = e.target ? 'ok' : 'warn', txt;
+    if (d.action === 'auto') txt = `Robot was confident (${d.reasons.join('; ')}): candidate #${d.target}.`;
+    else if (d.aborted) txt = 'Aborted.';
+    else if (d.unsure) txt = 'Operator not sure: nothing will be picked, nothing learned.';
+    else if (d.missed) txt = 'Operator: an okra was missed. The frame goes to the CVAT labelling queue.';
+    else if (d.target) txt = `Operator confirmed okra #${d.target} (answer “${d.answer_raw}”, ${d.response_s} s).`;
+    else txt = (d.note || 'No okra to pick.') + (d.answer_raw ? ` (answer “${d.answer_raw}”)` : '');
+    pane.innerHTML = `<div class="banner ${cls}">${txt}</div><button onclick="post('/api/ask_again',{})">Ask me again</button>`;
+  }
+  if (e.target) {
+    el('planpane').classList.remove('hidden');
+    el('plansum').textContent = e.plan ? `planned: ${e.plan.duration_s} s, approach pitch ${e.plan.pitch}°` : 'not planned yet';
+    const v = el('simvid');
+    if (e.files['sim.mp4']) { v.classList.remove('hidden'); const src = fileUrl(e.files['sim.mp4'], false); if (!v.src.endsWith(src)) v.src = src; }
+    else v.classList.add('hidden');
+    if (e.plan) { done.push('plan'); el('movepane').classList.remove('hidden'); }
+  }
+  if (e.executed || e.outcome) {
+    done.push('move'); el('outpane').classList.remove('hidden');
+    el('outres').textContent = e.outcome ? 'recorded: ' + e.outcome.result : (e.executed.aborted ? 'player aborted: ' + e.executed.aborted : '');
+    if (e.outcome) done.push('outcome');
+  }
+  const now = !e.target ? 'look' : !e.plan ? 'plan' : !(e.executed || e.outcome) ? 'move' : e.outcome ? '' : 'outcome';
+  setSteps(now, done);
+}
+function toggle(id) { selected.has(id) ? selected.delete(id) : selected.add(id); refreshSel(); }
+function refreshSel() {
+  document.querySelectorAll('#qsvg polygon, #chips .chip').forEach(n => n.classList.toggle('sel', selected.has(+n.dataset.id)));
+}
+
+async function loadEvents() {
+  const r = await api('/api/events');
+  el('hist').innerHTML = (r.events || []).map(e => `<tr class="click" data-id="${e.event_id}"><td>${e.event_id}</td><td>${e.asked}</td><td>${e.answer}</td><td>${e.n_okra}</td><td>${e.outcome}</td></tr>`).join('');
+  el('hist').querySelectorAll('tr').forEach(t => t.onclick = async () => { await post('/api/select_event', { event: t.dataset.id }); lastKey = ''; });
+}
+
+async function tick() {
+  try { S = await api('/api/state'); renderHeader(); renderLog(); renderEvent(); }
+  catch (e) { pill('p_agent', 'UI server offline', 'bad'); }
+  setTimeout(tick, 500);
+}
+const urlOp = new URLSearchParams(location.search).get('operator');
+if (urlOp) localStorage.setItem('operator', urlOp);
+if (!localStorage.getItem('operator')) { const n = prompt('Operator name (saved in this browser, stored with every answer):'); if (n) localStorage.setItem('operator', n); }
+tick(); loadEvents(); setInterval(loadEvents, 15000);
+</script>
+</body>
+</html>

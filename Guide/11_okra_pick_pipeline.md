@@ -11,7 +11,7 @@ ROBOT (Orin)                                        VM
   RealSense colour + depth aligned (pyrealsense2)      target -> grasp poses -> right-arm IK
   OkraDetector on GPU (~33 FPS)                        straight-line approach / pull / retreat
   pod xyz + axis -> pelvis frame (URDF + waist q)      checks: reach, IK error, limits, torso, speed
-  median of 15 sightings        -> target.json ---->   -> trajectory.json
+  candidates -> human check (13) -> target.json ---->   -> trajectory.json
                                                      plan/sim_view.py  meshed G1 (MuJoCo Menagerie)
  robot/arm_player.py  (~/g1_rec/pylib, py3.8)  <----   live window or sim.mp4
   rt/arm_sdk 50 Hz + rt/dex1/right/cmd
@@ -26,7 +26,7 @@ Shared settings: `robot/pick_config.py`. Kinematics: `robot/g1_chain.py` (numpy,
 | copy code/model to robot | `./okra_pick.sh deploy` | no |
 | camera extrinsic check | `./okra_pick.sh floor` | no |
 | gripper test | `./okra_pick.sh gripper open` / `close` | gripper only |
-| find pod | `./okra_pick.sh perceive` → `runs/<t>/target.json`, `target.jpg` | no |
+| find pod | `./okra_pick.sh perceive` → event in `okra_data/`, human check (Guide 13) → `target.json` | no |
 | plan + video | `./okra_pick.sh plan` → `trajectory.json`, `sim.mp4` | no |
 | watch plan live | `./okra_pick.sh sim` (MuJoCo window on the VM desktop) | no |
 | robot-side checks | `./okra_pick.sh dry` | no |
