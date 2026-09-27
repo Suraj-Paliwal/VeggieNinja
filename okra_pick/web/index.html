@@ -60,6 +60,18 @@
   video { width:100%; border-radius:8px; margin-top:8px; }
   .hidden { display:none !important; }
   .banner { padding:10px; border-radius:8px; margin:8px 0; }
+  .live { position:relative; width:100%; max-width:720px; aspect-ratio:4/3; background:#111; border-radius:8px; overflow:hidden; }
+  .live img { width:100%; height:100%; object-fit:contain; display:block; }
+  .live .badge { position:absolute; top:8px; left:8px; padding:3px 8px; border-radius:6px; font-size:12px; font-weight:600;
+                 color:#fff; background:rgba(0,0,0,.6); }
+  .live .badge.ok { background:var(--ok); } .live .badge.warn { background:var(--warn); } .live .badge.bad { background:var(--bad); }
+  .live .off { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:14px; text-align:center; padding:12px; }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width: 900px) { .pair { grid-template-columns:1fr; } }
+  .pair h4 { margin:0 0 4px; font-size:12px; color:var(--mute); font-weight:600; }
+  .autobox { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:10px; background:var(--bg); }
+  .autobox label { cursor:pointer; }
+  .autobox .row { margin:6px 0 2px; }
   .banner.ok { background:rgba(18,161,80,.12); } .banner.warn { background:rgba(232,144,12,.15); } .banner.bad { background:rgba(217,45,32,.12); }
 </style>
 </head>
@@ -117,6 +129,26 @@
 
   <!-- ============ centre: okra workflow -->
   <section>
+    <div class="card" id="livecard">
+      <h2>Live camera <span class="note" id="livestat"></span></h2>
+      <div id="livemoved" class="note hidden">The live view is next to the question below.</div>
+      <div id="livehome">
+        <div class="live" id="livebox">
+          <img id="liveimg" alt="live head camera">
+          <div class="off" id="liveoff">live view hidden</div>
+          <span class="badge" id="livebadge">…</span>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="b_liveview" onclick="setLiveView(!liveOn)">Hide</button>
+        <button title="start the camera feed on the robot (okra_pick.sh live start)" onclick="post('/api/live',{action:'start'})">Start feed</button>
+        <button onclick="post('/api/live',{action:'stop'})">Stop feed</button>
+        <button title="okra outlines drawn on the robot: green = passes the filter, orange = rejected" onclick="overlay(true)">Outlines on</button>
+        <button onclick="overlay(false)">Outlines off</button>
+      </div>
+      <div class="note">The robot compresses the video and draws the outlines, then the VM passes it on unchanged. The Look step and recordings take the camera from the feed automatically; during a recording you see the recorder's copy (no outlines).</div>
+    </div>
+
     <div class="card">
       <h2>Okra pick</h2>
       <div class="steps" id="steps">
@@ -125,6 +157,18 @@
         <div class="step" data-s="outcome">5 Outcome</div>
       </div>
 
+      <div class="autobox">
+        <label title="watch the live feed; when the detector sees an okra, take a snapshot, run Look and ask you"><input type="checkbox" id="a_armed" onchange="autoSet({armed:this.checked})"> <b>Auto-look</b>: ask me when the live feed sees an okra</label>
+        <div class="row">
+          <span class="note">min confidence</span>
+          <select id="a_conf" onchange="autoSet({min_conf:+this.value})"><option>0.3</option><option>0.4</option><option selected>0.5</option><option>0.6</option><option>0.7</option></select>
+          <span class="note">after YES</span>
+          <select id="a_after" onchange="autoSet({after_yes:this.value})" title="what the robot does for an okra you confirmed; every step runs the live safety gate first">
+            <option value="pick">plan + PICK it (arm moves)</option><option value="reach">plan + reach test (arm moves, no grasp)</option>
+            <option value="plan">plan only (nothing moves)</option><option value="ask">nothing (just record the answer)</option></select>
+        </div>
+        <div class="note" id="a_status">auto-look off</div>
+      </div>
       <div class="row">
         <select id="mode"><option value="">ask when unsure</option><option value="always">always ask</option></select>
         <button class="primary" id="b_look" onclick="post('/api/look',{mode:el('mode').value})">1 · Look for okra</button>
@@ -134,17 +178,26 @@
       <div id="askpane" class="hidden">
         <h3>2 · Is it okra?</h3>
         <ul class="reasons" id="reasons"></ul>
-        <div class="imgwrap"><img id="qimg" alt="what the robot sees"><svg id="qsvg" viewBox="0 0 640 480"></svg></div>
-        <div class="note">Click the pods that ARE okra (on the image or below). Green number = within reach, orange = out of reach.</div>
-        <div class="chips" id="chips"></div>
-        <div class="row">
-          <button class="go" onclick="answer('ids')">Selected are okra</button>
-          <button onclick="answer('n')">None is okra</button>
-          <button onclick="answer('m')">It missed an okra</button>
-          <button onclick="answer('s')">Not sure</button>
+        <div class="pair">
+          <div><h4>Question frame (click the pods)</h4>
+            <div class="imgwrap"><img id="qimg" alt="what the robot sees"><svg id="qsvg" viewBox="0 0 640 480"></svg></div>
+            <div class="note" style="margin-top:6px">Click the pods that ARE okra (on the image or below). Green number = within reach, orange = out of reach.</div>
+            <div class="chips" id="chips"></div>
+            <div class="row">
+              <button class="go" onclick="answer('ids')">Selected are okra</button>
+              <button onclick="answer('n')">None is okra</button>
+              <button onclick="answer('m')">It missed an okra</button>
+              <button onclick="answer('s')">Not sure</button>
+            </div>
+          </div>
+          <div>
+            <div id="trigwrap" class="hidden" style="margin-bottom:10px"><h4 id="trigcap">What triggered it (frozen live frame)</h4>
+              <img id="trigimg" alt="frozen live frame that triggered auto-look" style="width:100%;display:block;border-radius:8px"></div>
+            <h4>Live now (for a closer look; your answer is for the question frame)</h4><div id="liveslot"></div></div>
         </div>
       </div>
 
+      <div id="chainpane" class="banner hidden"></div>
       <div id="decpane" class="hidden"></div>
 
       <div id="planpane" class="hidden">
@@ -165,12 +218,13 @@
 
       <div id="outpane" class="hidden">
         <h3>5 · Did it pick the okra?</h3>
-        <div class="row">
+        <div class="row" id="outbtns">
           <input id="onote" type="text" placeholder="note (optional)" style="flex:1">
           <button class="go" onclick="outcome('success')">Yes</button>
           <button onclick="outcome('partial')">Partly</button>
           <button class="danger" onclick="outcome('fail')">No</button>
         </div>
+        <div class="row" style="margin-top:6px"><button title="leave this okra and let auto-look find the next one" onclick="outcome('skipped')">Skip this okra → next</button></div>
         <div id="outres" class="note"></div>
       </div>
     </div>
@@ -228,15 +282,81 @@ function execute(kind) {
   if (t === word) post('/api/execute', { kind, confirm: word });
 }
 async function answer(kind) {
-  let a = kind;
-  if (kind === 'ids') { if (!selected.size) { alert('Select the okra first (click it)'); return; } a = [...selected].sort().join(','); }
-  const r = await post('/api/answer', { answer: a, operator: localStorage.getItem('operator') || '' });
-  if (r.ok) { selected.clear(); lastKey = ''; logLocal('answer ' + a + ' -> target ' + r.decision.target); }
+  let a = kind, conf;
+  if (kind === 'ids') {
+    if (!selected.size) { alert('Select the okra first (click it)'); return; }
+    a = [...selected].sort().join(',');
+    const after = S.auto && S.auto.after_yes;
+    if (after === 'pick' || after === 'reach') {        // the YES is also the go-ahead for the arm, for this okra only
+      if (!confirm(`Okra #${a}: the robot will plan and then ${after === 'pick' ? 'PICK it' : 'do a REACH test'} — THE ARM WILL MOVE.\nArea clear, e-stop in hand?\n\nOK = yes, go ahead · Cancel = back to the question`)) return;
+      conf = after.toUpperCase();
+    }
+  }
+  const r = await post('/api/answer', { answer: a, operator: localStorage.getItem('operator') || '', confirm: conf });
+  if (r.ok) { selected.clear(); lastKey = ''; logLocal('answer ' + a + ' -> target ' + r.decision.target + (r.chain ? ' · ' + r.chain.kind + ' started' : '') + (r.note ? ' (' + r.note + ')' : '')); }
 }
 async function outcome(result) {
   const r = await post('/api/outcome', { result, note: el('onote').value });
   if (r.ok) { el('outres').textContent = 'recorded: ' + result; loadEvents(); }
 }
+// ---- live camera: one <img> MJPEG stream, moved next to the question while one is open
+let liveOn = true;
+try { liveOn = localStorage.getItem('liveOn') !== '0'; } catch (e) {}
+function liveSrc() { return '/api/live.mjpg?' + (TOKEN ? 'token=' + TOKEN + '&' : '') + 't=' + Date.now(); }
+function setLiveView(on) {
+  liveOn = on;
+  try { localStorage.setItem('liveOn', on ? '1' : '0'); } catch (e) {}
+  const img = el('liveimg');
+  if (on && !document.hidden) { if (!img.getAttribute('src')) img.src = liveSrc(); }
+  else img.removeAttribute('src');                      // closes the stream: no bytes over the robot link
+  el('liveoff').classList.toggle('hidden', on);
+  el('b_liveview').textContent = on ? 'Hide' : 'Show';
+}
+el('liveimg').onerror = () => { el('liveimg').removeAttribute('src'); setTimeout(() => setLiveView(liveOn), 2000); };
+document.addEventListener('visibilitychange', () => setLiveView(liveOn));
+async function overlay(on) { const r = await post('/api/live', { action: on ? 'overlay_on' : 'overlay_off' }); if (r.ok) logLocal('outlines ' + (on ? 'on' : 'off')); }
+async function autoSet(body) { const r = await post('/api/auto', body); if (r.ok) renderAuto(r.auto); }
+function renderAuto(A) {
+  if (!A) return;
+  if (document.activeElement !== el('a_conf')) el('a_conf').value = String(A.min_conf);
+  el('a_armed').checked = A.armed;
+  if (document.activeElement !== el('a_after')) el('a_after').value = A.after_yes;
+  const c = A.chain, e = S.event, pane = el('chainpane');
+  if (c && e && c.event === e.id) {
+    pane.classList.remove('hidden');
+    pane.className = 'banner ' + (/failed|exit|cancel/.test(c.step) ? 'bad' : /done|finished|planned/.test(c.step) ? 'ok' : 'warn');
+    pane.textContent = `This okra (${c.event}): ${c.kind === 'plan' ? 'plan only' : 'plan → ' + c.kind} · now: ${c.step}`;
+  } else pane.classList.add('hidden');
+  el('a_status').textContent = A.armed ? A.status : 'auto-look off';
+}
+// attention when a new question opens (the operator may be looking at the robot, not the screen)
+let lastAsk = '';
+function attention(e) {
+  const k = e && e.pending ? e.id : '';
+  if (k && k !== lastAsk) {
+    try { const c = new AudioContext(), o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination);
+          o.frequency.value = 880; g.gain.value = 0.15; o.start(); o.stop(c.currentTime + 0.25); } catch (err) {}
+  }
+  lastAsk = k;
+  document.title = k ? '❓ Is it okra? · G1 Okra Operator' : 'G1 Okra Operator';
+}
+function renderLive() {
+  const L = S.live || {}, b = el('livebadge');
+  let txt, cls;
+  if (!liveOn) { txt = 'hidden'; cls = ''; }
+  else if (L.age_s == null) { txt = 'no feed: ' + (L.error || 'connecting'); cls = 'bad'; }
+  else if (L.age_s > 2) { txt = `STALE ${L.age_s.toFixed(0)} s old: ` + (L.error || 'no new frames'); cls = 'bad'; }
+  else if (L.source === 'paused') { txt = 'camera in use by a step'; cls = 'warn'; }
+  else { txt = `LIVE · ${L.source || ''}` + (L.fps ? ` · ${L.fps} fps` : ''); cls = 'ok'; }
+  b.textContent = txt; b.className = 'badge ' + cls;
+  el('livestat').textContent = L.url ? '(robot ' + L.url + ')' : '';
+  const asking = !el('askpane').classList.contains('hidden');
+  const box = el('livebox'), dest = asking ? el('liveslot') : el('livehome');
+  if (box.parentNode !== dest) dest.appendChild(box);
+  el('livemoved').classList.toggle('hidden', !asking);
+}
+setLiveView(liveOn);
+
 el('stop').onclick = () => robot('stop');
 document.addEventListener('keydown', e => { if (e.key === 'Escape') robot('stop'); });
 
@@ -291,6 +411,13 @@ function renderEvent() {
     el('askpane').classList.remove('hidden');
     el('reasons').innerHTML = e.pending.reasons.map(r => `<li>${r}</li>`).join('');
     el('qimg').src = fileUrl(e.files['question_view.jpg'] || e.files['question.jpg'], true);
+    const trig = e.files['trigger_live.jpg'];
+    el('trigwrap').classList.toggle('hidden', !trig);
+    if (trig) {
+      el('trigimg').src = fileUrl(trig, true);
+      const t = e.trigger && e.trigger.okra;
+      el('trigcap').textContent = 'What triggered it (frozen live frame' + (t ? `, conf ${t.best_conf.toFixed(2)}, ${t.hits}/${t.frames} frames` : '') + ')';
+    }
     const shown = e.candidates.filter(c => e.pending.shown.includes(c.id));
     el('qsvg').innerHTML = shown.map(c => `<polygon data-id="${c.id}" points="${c.key_mask.map(p => p.join(',')).join(' ')}"/>`).join('');
     el('qsvg').querySelectorAll('polygon').forEach(p => p.onclick = () => toggle(+p.dataset.id));
@@ -321,8 +448,12 @@ function renderEvent() {
     else v.classList.add('hidden');
     if (e.plan) { done.push('plan'); el('movepane').classList.remove('hidden'); }
   }
+  if (e.target || e.executed || e.outcome) {
+    el('outpane').classList.remove('hidden');
+    el('outbtns').classList.toggle('hidden', !e.executed);
+  }
   if (e.executed || e.outcome) {
-    done.push('move'); el('outpane').classList.remove('hidden');
+    done.push('move');
     el('outres').textContent = e.outcome ? 'recorded: ' + e.outcome.result : (e.executed.aborted ? 'player aborted: ' + e.executed.aborted : '');
     if (e.outcome) done.push('outcome');
   }
@@ -341,7 +472,7 @@ async function loadEvents() {
 }
 
 async function tick() {
-  try { S = await api('/api/state'); renderHeader(); renderLog(); renderEvent(); }
+  try { S = await api('/api/state'); renderHeader(); renderLog(); renderEvent(); renderLive(); renderAuto(S.auto); attention(S.event); }
   catch (e) { pill('p_agent', 'UI server offline', 'bad'); }
   setTimeout(tick, 500);
 }

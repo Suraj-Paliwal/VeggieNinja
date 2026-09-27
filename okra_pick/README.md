@@ -30,6 +30,7 @@ aborts on its own (gripper open if needed, back along the path, blend out) and l
 | `robot/okra_perceive.py` | robot (conda g1brainco) | detector + depth → pod in pelvis frame |
 | `robot/arm_player.py` | robot (~/g1_rec/pylib) | executes the plan: preflight, per-tick monitors, closed loop, safe abort on STOP / link loss |
 | `robot/safety_probe.py` | robot (~/g1_rec/pylib) | read-only live robot snapshot for the safety gate |
+| `robot/live_cam.py` | robot (conda g1brainco) | live head-camera MJPEG for the web page, okra outlines, camera hand-over (Guide 17) |
 | `safety/safety_check.py`, `safety/safety_limits.py` | VM | safety gate before every step + the policy limits |
 | `robot/body_pose.py`, `robot/closed_loop.py` | robot | body pose from legs + IMU, grasp correction (Guide 14) |
 | `robot/pick_config.py`, `robot/g1_chain.py`, `robot/g1.urdf` | both | settings, kinematics |
@@ -37,7 +38,7 @@ aborts on its own (gripper open if needed, back along the path, blend out) and l
 | `plan/sim_view.py` | VM | meshed G1 playback (window / mp4) |
 | `robot/candidates.py` | both | merges per-frame detections into candidates |
 | `hitl/` | VM | human-in-the-loop: `decide.py`, `confirm.py`, `outcome.py`, `export_dataset.py`, `store.py`, `hitl_config.py` |
-| `web/` | VM | operator web interface (`server.py` + `index.html`) |
+| `web/` | VM | operator web interface (`server.py` + `index.html`), live camera relay (Guide 17) |
 | `tests/` | VM | offline tests: `test_safety.py`, `test_link_loss.py`, `test_player_sim.py`, `test_closed_loop.py`, `test_perceive_math.py`, `test_hitl.py` |
 | `../okra_data/` | VM | every event (look → question → answer → plan → outcome), see its README |
 

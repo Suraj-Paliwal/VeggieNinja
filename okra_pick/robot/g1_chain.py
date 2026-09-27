@@ -75,7 +75,31 @@ class Chain:
         return T
 
 
-def T_pelvis_optical(chain, waist_q):
-    """pelvis <- head camera optical frame, for waist (yaw, roll, pitch) in rad."""
+def rotvec_R(rv):
+    """Rotation matrix from a rotation vector (axis * angle, rad)."""
+    rv = np.asarray(rv, float)
+    th = np.linalg.norm(rv)
+    if th < 1e-12:
+        return np.eye(3)
+    k = rv / th
+    K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+    return np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * K @ K
+
+
+def R_rotvec(R):
+    """Rotation vector (rad) of a rotation matrix (inverse of rotvec_R)."""
+    th = np.arccos(np.clip((np.trace(R) - 1) / 2, -1.0, 1.0))
+    if th < 1e-12:
+        return np.zeros(3)
+    return th / (2 * np.sin(th)) * np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+
+
+def T_pelvis_optical(chain, waist_q, cam_corr=None):
+    """pelvis <- head camera optical frame, for waist (yaw, roll, pitch) in rad.
+    cam_corr: rotation vector (rad) in the d435_link frame = how the real camera mount differs from the URDF
+    (measured by okra_perceive.py --floor-check, stored in pick_config.CAM_CORR_ROTVEC_DEG)."""
     T = chain.fk("pelvis", "d435_link", dict(zip(WAIST_JOINTS, waist_q)))
+    if cam_corr is not None and np.any(cam_corr):
+        T = T.copy()
+        T[:3, :3] = T[:3, :3] @ rotvec_R(cam_corr)
     return T @ homog(R_LINK_OPTICAL, [0, 0, 0])

@@ -109,6 +109,7 @@ Robot bring-up (gantry, e-stop in hand)
 4. `g1_connect/robot_mode.sh ai` (after a reboot) → `damp` → `ready` → `start` (FSM 200).
 5. `okra_pick/okra_pick.sh deploy` → `perceive env ok, cuda True` and `player env ok`.
 6. Optional: `robot_agent/agent.sh deploy && robot_agent/agent.sh start` (12).
+   Live camera for the web page: `./okra_pick.sh live start` → green LIVE badge (17).
 
 Calibration and dry runs
 7. `./okra_pick.sh floor` (camera mount; 1° ≈ 9 mm at the pod).

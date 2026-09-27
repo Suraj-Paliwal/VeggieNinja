@@ -7,7 +7,8 @@ Records into one episode folder, everything stamped with the robot's wall clock 
   state/<topic>_NNNN.npz     DDS topics, flushed in chunks every --flush s
   meta.json, recorder.log
 
-The same color encode is also sent as MPEG-TS over UDP to the VM for a live preview.
+The same color encode is also sent as MPEG-TS over UDP to the VM for a live preview, and to
+127.0.0.1:5601 on the robot, where okra_pick/robot/live_cam.py shows it on the web page while recording.
 Stop with SIGINT/SIGTERM: ffmpeg is closed cleanly and the last state chunk is written.
 """
 
@@ -102,6 +103,8 @@ def ffmpeg_color(args, out):
     tee = "[f=matroska]%s/color.mkv|[f=mkvtimestamp_v2]%s/color_ts.txt" % (out, out)
     if args.preview:
         tee += "|[f=mpegts:bsfs/v=dump_extra:onfail=ignore]udp://%s?pkt_size=1316" % args.preview
+    if args.preview_local:
+        tee += "|[f=mpegts:bsfs/v=dump_extra:onfail=ignore]udp://%s?pkt_size=1316" % args.preview_local
     return ["ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
             "-f", "v4l2", "-input_format", "yuyv422", "-video_size", "%sx%s" % (w, h),
             "-framerate", str(args.fps), "-use_wallclock_as_timestamps", "1", "-i", COLOR_DEV,
@@ -151,6 +154,7 @@ def main():
     ap.add_argument("--depth", action="store_true", help="also record depth")
     ap.add_argument("--depth-size", default="640x480")
     ap.add_argument("--preview", default="192.168.123.100:5600", help="host:port, '' to disable")
+    ap.add_argument("--preview-local", default="127.0.0.1:5601", help="copy for the web live feed, '' to disable")
     ap.add_argument("--flush", type=float, default=10.0, help="state chunk period (s)")
     args = ap.parse_args()
 

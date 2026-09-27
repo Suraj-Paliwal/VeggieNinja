@@ -28,6 +28,11 @@ GRIP_SETTLE_S = 3.0                      # max wait for the jaws to stop
 # Dex1 base is mounted where the rubber hand was (right_hand_palm_joint: x=0.0415, y=-0.003);
 # the pad centre sits ~0.09 m further along the gripper axis (dex1_1.urdf finger joints at 0.059+0.038).
 TCP_XYZ = (0.0415 + 0.09, -0.003, 0.0)   # CALIBRATE
+
+# ---- head camera mount: how the real D435 differs from the URDF (rotation vector in d435_link, degrees) ----
+# Measured with `okra_pick.sh floor` (robot standing, feet flat): it prints the value to put here; re-run until the
+# floor tilt is < 1 deg. A turn of the camera about the vertical is not observable from a floor (not included).
+CAM_CORR_ROTVEC_DEG = (-0.75, 3.90, -0.83)   # floor check 2026-09-27 on the robot: 2x10 frames, sd < 0.06 deg
 CLOSE_AXIS = "y"                         # wrist axis the jaws close along: "y" or "z"  (CALIBRATE)
 
 # ---- grasp geometry (pelvis frame, metres) ----
@@ -47,9 +52,17 @@ PULL_SPEED = 0.02                        # m/s harvesting pull
 IK_POS_TOL, IK_ROT_TOL_DEG = 0.004, 3.0
 LIMIT_MARGIN = 0.05                      # rad kept away from joint limits
 # workspace the planner accepts for the pod (pelvis frame); outside = refuse
+# Comfortable reach box: green in the question image, preferred target. NOT a refusal any more (2026-09-27, the
+# operator wants it to try): the planner's IK + joint-limit margin + torso check decide. PLAN_SANITY only rejects
+# absurd positions (bad depth).
+PLAN_SANITY = ((0.20, 0.70), (-0.60, 0.40), (-0.20, 0.55))
 REACH_X = (0.35, 0.50)
 REACH_Y = (-0.40, 0.05)
 REACH_Z = (0.10, 0.40)
+# Comfortable sub-zone for placing a pod (pelvis frame, pod centre): every corner planned with >= 0.11 rad
+# joint-limit margin on 2026-09-27 (the reach box edges can be as low as 0.07 or fail). tools/place_zone.py
+# draws it on the live feed.
+PLACE_ZONE = ((0.39, 0.45), (-0.16, -0.03), (0.11, 0.19))
 
 # ---- player safety monitors ----
 MAX_START_DIFF = 0.15                    # rad: plan's start pose vs the robot's current arm pose

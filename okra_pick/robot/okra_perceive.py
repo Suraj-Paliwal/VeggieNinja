@@ -36,10 +36,11 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "okra_robot"))       # detector copied next to this folder
 import pick_config as C                                            # noqa: E402
 from candidates import Candidates                                  # noqa: E402
-from g1_chain import Chain, T_pelvis_optical                       # noqa: E402
+from g1_chain import Chain, R_rotvec, T_pelvis_optical, rotvec_R   # noqa: E402
 
 POD_RADIUS = 0.01      # m: the mask depth is the pod's front surface; its axis is ~1 cm further
 CAND_CONF = 0.10       # detector confidence floor for candidates (the filter's own threshold is higher)
+CAM_CORR = np.radians(C.CAM_CORR_ROTVEC_DEG)    # camera mount correction (floor check), d435_link frame
 
 
 class LowState:
@@ -82,9 +83,26 @@ def start_camera():
     COLOR_TO_DEPTH[:3, :3] = np.asarray(ex.rotation).reshape(3, 3).T      # librealsense stores column-major
     COLOR_TO_DEPTH[:3, 3] = ex.translation
     print("RealSense colour->depth offset from factory calibration: %s mm" % np.round(1000 * np.asarray(ex.translation), 1).tolist(), flush=True)
-    for _ in range(15):                                   # let auto-exposure settle
-        pipe.wait_for_frames()
+    try:
+        for _ in range(15):                               # let auto-exposure settle
+            pipe.wait_for_frames()
+    except RuntimeError:
+        pipe.stop()                                       # release the device before a retry
+        raise
     return pipe, rs.align(rs.stream.color), scale, intr
+
+
+def start_camera_retry(tries=3):
+    """The D435 sometimes delivers no frames right after another program (live feed, recorder) closed it
+    (seen on the robot 2026-09-27: 'Frame didn't arrive within 5000'). Restart the pipeline instead of failing."""
+    for k in range(tries):
+        try:
+            return start_camera()
+        except RuntimeError as e:
+            if k == tries - 1:
+                raise
+            print("camera start failed (%s), retrying" % e, flush=True)
+            time.sleep(2.0)
 
 
 def grab(pipe, align, scale):
@@ -127,30 +145,83 @@ def in_reach(p):
     return all(lo <= v <= hi for v, (lo, hi) in zip(p, (C.REACH_X, C.REACH_Y, C.REACH_Z)))
 
 
-def floor_check(pipe, align, scale, intr, chain, ls):
-    """Fit the floor plane in the pelvis frame; its height should be about -(pelvis height)."""
-    _, depth = grab(pipe, align, scale)
-    q = ls.q()
-    if q is None:
-        sys.exit("no rt/lowstate")
-    T = T_pelvis_optical(chain, q[12:15]) @ COLOR_TO_DEPTH
+WAIST_NAMES = ("waist_yaw_joint", "waist_roll_joint", "waist_pitch_joint")
+LEG_NAMES = ["left_hip_pitch_joint", "left_hip_roll_joint", "left_hip_yaw_joint", "left_knee_joint",
+             "left_ankle_pitch_joint", "left_ankle_roll_joint"]
+
+
+def floor_frame(depth, q, rpy, intr, chain):
+    """One depth frame -> floor plane in the pelvis frame and the camera mount correction it implies.
+    The legs + IMU say where the floor is; the rotation that turns the camera's floor normal into world-up (about
+    the camera) is the mount error. Expressed in d435_link it does not depend on the waist. A turn about the vertical
+    is not observable from a floor and is not included."""
+    T = T_pelvis_optical(chain, q[12:15], CAM_CORR) @ COLOR_TO_DEPTH
     v, u = np.mgrid[240:480:4, 0:640:4]
     z = depth[v, u]
     ok = (z > 0.3) & (z < 3.0)
     pts = np.stack([(u[ok] - intr.ppx) * z[ok] / intr.fx, (v[ok] - intr.ppy) * z[ok] / intr.fy, z[ok]], 1)
     P = pts @ T[:3, :3].T + T[:3, 3]
-    for _ in range(3):                                    # least squares z = a x + b y + c, drop outliers
+    # RANSAC: the largest flat surface in view (boxes, stands, feet are ignored), then least squares on it
+    rng = np.random.default_rng(0)
+    best = None
+    for _ in range(300):
+        s3 = P[rng.choice(len(P), 3, replace=False)]
+        nrm = np.cross(s3[1] - s3[0], s3[2] - s3[0])
+        if np.linalg.norm(nrm) < 1e-9 or abs(nrm[2]) / np.linalg.norm(nrm) < 0.9:   # only near-horizontal planes
+            continue
+        nrm /= np.linalg.norm(nrm)
+        inl = np.abs((P - s3[0]) @ nrm) < 0.015
+        if best is None or inl.sum() > best.sum():
+            best = inl
+    if best is None or best.sum() < 500:
+        return None
+    frac = best.mean()
+    P = P[best]
+    for _ in range(2):                                    # least squares z = a x + b y + c on the inliers
         A = np.c_[P[:, 0], P[:, 1], np.ones(len(P))]
         coef, *_ = np.linalg.lstsq(A, P[:, 2], rcond=None)
         r = P[:, 2] - A @ coef
         P = P[np.abs(r) < max(0.01, 2.5 * r.std())]
-    tilt = np.degrees(np.arctan(np.hypot(coef[0], coef[1])))
-    names = ["left_hip_pitch_joint", "left_hip_roll_joint", "left_hip_yaw_joint", "left_knee_joint",
-             "left_ankle_pitch_joint", "left_ankle_roll_joint"]
-    foot_z = chain.fk("pelvis", "left_ankle_roll_link", dict(zip(names, q[:6])))[2, 3] - 0.035
-    print(json.dumps({"floor_height_below_camera_model": float(coef[2]), "floor_from_leg_kinematics": float(foot_z),
-                      "difference_m": float(coef[2] - foot_z), "floor_tilt_deg": float(tilt),
-                      "imu_rpy_deg": [float(np.degrees(x)) for x in ls.rpy()], "points": int(len(P))}, indent=1))
+    foot_z = chain.fk("pelvis", "left_ankle_roll_link", dict(zip(LEG_NAMES, q[:6])))[2, 3] - 0.035
+    n = np.array([-coef[0], -coef[1], 1.0])
+    n /= np.linalg.norm(n)
+    up = rotvec_R([-rpy[0], 0, 0]) @ rotvec_R([0, -rpy[1], 0]) @ np.array([0, 0, 1.0])   # world up in pelvis
+    ax = np.cross(n, up)
+    R_fix = rotvec_R(ax / max(1e-12, np.linalg.norm(ax)) * np.arcsin(min(1.0, np.linalg.norm(ax))))
+    R_link = chain.fk("pelvis", "d435_link", dict(zip(WAIST_NAMES, q[12:15])))[:3, :3]
+    corr = np.degrees(R_rotvec(R_link.T @ R_fix @ R_link @ rotvec_R(CAM_CORR)))
+    err = np.degrees(np.arccos(np.clip(n @ up, -1, 1)))   # floor vs world-up with the correction in use
+    return {"corr": corr, "err_deg": err, "height": coef[2], "foot_z": foot_z, "frac": frac, "points": len(P),
+            "rpy_deg": np.degrees(rpy[:2])}
+
+
+def floor_check(pipe, align, scale, intr, chain, ls, frames=10):
+    """Camera mount check: floor from the depth camera vs floor from legs + IMU, averaged over `frames` frames
+    (the robot sways while balancing; each frame uses the IMU read right after it)."""
+    res = []
+    for _ in range(frames):
+        _, depth = grab(pipe, align, scale)
+        q, rpy = ls.q(), ls.rpy()
+        if q is None:
+            sys.exit("no rt/lowstate")
+        r = floor_frame(depth, q, rpy, intr, chain)
+        if r is not None:
+            res.append(r)
+    if len(res) < frames // 2:
+        sys.exit("floor check: no large flat floor in view (clear the area in front of the robot)")
+    C3 = np.array([r["corr"] for r in res])
+    mean, sd = C3.mean(0), C3.std(0)
+    diff = np.array([r["height"] - r["foot_z"] for r in res])
+    print(json.dumps({"frames": len(res), "floor_fraction_of_view": round(float(np.mean([r["frac"] for r in res])), 2),
+                      "floor_vs_up_with_current_corr_deg": round(float(np.mean([r["err_deg"] for r in res])), 2),
+                      "height_diff_camera_minus_legs_m": round(float(diff.mean()), 3),
+                      "imu_roll_pitch_deg_range": [[round(float(x), 2) for x in np.min([r["rpy_deg"] for r in res], 0)],
+                                                   [round(float(x), 2) for x in np.max([r["rpy_deg"] for r in res], 0)]],
+                      "cam_corr_in_use_deg": [float(x) for x in C.CAM_CORR_ROTVEC_DEG],
+                      "SUGGESTED_CAM_CORR_ROTVEC_DEG": [round(float(x), 2) for x in mean],
+                      "suggested_sd_deg": [round(float(x), 2) for x in sd]}, indent=1))
+    print("pick_config.py:  CAM_CORR_ROTVEC_DEG = (%.2f, %.2f, %.2f)   # floor check %s, %d frames, sd %s deg"
+          % (mean[0], mean[1], mean[2], time.strftime("%Y-%m-%d"), len(res), np.round(sd, 2).tolist()))
 
 
 def annotate(color, cands):
@@ -180,7 +251,7 @@ def main():
 
     chain = Chain(os.path.join(HERE, "g1.urdf"))
     ls = LowState(args.iface)
-    pipe, align, scale, intr = start_camera()
+    pipe, align, scale, intr = start_camera_retry()
     K = (intr.fx, intr.fy, intr.ppx, intr.ppy)
     try:
         t0 = time.time()
@@ -202,7 +273,7 @@ def main():
         for f in range(args.frames):
             color, depth = grab(pipe, align, scale)
             q = ls.q() or q
-            T = T_pelvis_optical(chain, q[12:15]) @ COLOR_TO_DEPTH           # pelvis <- colour optical frame
+            T = T_pelvis_optical(chain, q[12:15], CAM_CORR) @ COLOR_TO_DEPTH           # pelvis <- colour optical frame
             cv2.imwrite(os.path.join(out, "frames", "%03d.jpg" % f), color, [cv2.IMWRITE_JPEG_QUALITY, 95])
             obs = []
             for d in det.detect(color, depth_m=depth, intrinsics=K, return_rejected=True):
@@ -228,7 +299,7 @@ def main():
                "detector": det.weights.name, "time": time.time()},
               open(os.path.join(out, "candidates.json"), "w"))
     np.savez_compressed(os.path.join(out, "depth_key.npz"), depth_mm=np.round(key_depth * 1000).astype(np.uint16))
-    T = T_pelvis_optical(chain, q[12:15]) @ COLOR_TO_DEPTH
+    T = T_pelvis_optical(chain, q[12:15], CAM_CORR) @ COLOR_TO_DEPTH
     json.dump({"q": q, "imu_rpy": ls.rpy(), "waist": q[12:15], "color_to_depth": COLOR_TO_DEPTH.tolist(), "intrinsics": {"fx": K[0], "fy": K[1], "ppx": K[2], "ppy": K[3],
                "width": 640, "height": 480}, "T_pelvis_optical": T.tolist(), "time": time.time()},
               open(os.path.join(out, "robot_state.json"), "w"), indent=1)

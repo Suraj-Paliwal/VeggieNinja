@@ -152,9 +152,12 @@ def apply_answer(ev, ans, operator):
         dec["missed"] = kind == "m"
         for i in dec["shown"]:
             dec["labels"][str(i)] = "okra" if i in ids else ("unsure" if kind == "m" else "not_okra")
-        reach = [i for i in ids if byid[i]["in_reach"] and byid[i]["xyz_pelvis"] is not None]
-        dec["target"] = reach[0] if reach else None
-        dec["note"] = "confirmed okra is out of reach: move closer and look again" if ids and not reach else ""
+        # The planner's IK decides whether the arm can get there; a pod inside the comfortable box is preferred.
+        has_xyz = [i for i in ids if byid[i]["xyz_pelvis"] is not None]
+        has_xyz.sort(key=lambda i: not byid[i]["in_reach"])
+        dec["target"] = has_xyz[0] if has_xyz else None
+        dec["note"] = ("confirmed okra has no 3D position (no depth): look again" if ids and not has_xyz else
+                       "outside the comfortable box: the planner's IK decides" if has_xyz and not byid[has_xyz[0]]["in_reach"] else "")
     yes = dec["target"] is not None
     robot("led", {"rgb": list(H.LED_YES if yes else H.LED_NO)})
     robot("say", {"text": H.SAY_YES if yes else H.SAY_NO})

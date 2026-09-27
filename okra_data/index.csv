@@ -1,2 +1,15 @@
 event_id,date,n_candidates,top_conf,policy,asked,reasons,answer,n_okra,n_not_okra,missed,unsure,operator,response_s,target_in_reach,planned,executed,outcome,detector
 example_synthetic,0000-examples,0,,,,,,0,0,,,,,False,True,False,,
+20260927_102458,2026-09-27,2,0.902,always,True,policy: always ask | confusion: candidate(s) 2 almost as likely as 1 | outside the arm's reach,1,1,1,False,False,suraj,73.9,False,False,False,,okra_seg_s02.pt
+20260927_102716,2026-09-27,1,0.901,always,True,policy: always ask | position unstable (3.3 cm) | outside the arm's reach,1,1,0,False,False,suraj,5.5,False,False,False,,okra_seg_s02.pt
+20260927_102829,2026-09-27,1,0.892,always,True,policy: always ask | outside the arm's reach,1,1,0,False,False,suraj,4.6,False,False,False,,okra_seg_s02.pt
+20260927_102939,2026-09-27,2,0.915,always,True,policy: always ask | confusion: candidate(s) 2 almost as likely as 1 | outside the arm's reach,1,1,1,False,False,suraj,10.8,False,False,False,,okra_seg_s02.pt
+20260927_103051,2026-09-27,2,0.8,always,True,policy: always ask | outside the arm's reach,1,1,1,False,False,suraj,39.6,False,False,False,,okra_seg_s02.pt
+20260927_103226,2026-09-27,1,0.522,,,,,0,0,,,,,False,False,False,,okra_seg_s02.pt
+20260927_104340,2026-09-27,1,0.845,always,True,policy: always ask | outside the arm's reach,1,1,0,False,False,suraj,8.4,False,False,False,,okra_seg_s02.pt
+20260927_105005,2026-09-27,1,0.653,always,True,policy: always ask | outside the arm's reach,1,1,0,False,False,terminal (user: reach the okra where it is),9.7,False,False,False,,okra_seg_s02.pt
+20260927_105111,2026-09-27,1,0.868,always,True,policy: always ask | outside the arm's reach,1,1,0,False,False,terminal (user: go and grab it),273.9,True,False,False,,okra_seg_s02.pt
+20260927_105457,2026-09-27,0,,,,,,0,0,,,,,False,False,False,,
+20260927_105623,2026-09-27,0,,,,,,0,0,,,,,False,False,False,,
+20260927_105718,2026-09-27,0,,,,,,0,0,,,,,False,False,False,,
+20260927_105806,2026-09-27,1,0.858,always,True,policy: always ask | outside the arm's reach,1,1,0,False,False,terminal (user: go and grab it),9.4,True,False,False,,okra_seg_s02.pt

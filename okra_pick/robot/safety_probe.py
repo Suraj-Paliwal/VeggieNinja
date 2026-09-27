@@ -62,6 +62,13 @@ class Topic:
             self.n, self.t_first, self.t_last, self.max_gap = 0, None, None, 0.0
 
 
+
+def max_temp(t):
+    """Motor temperature as one int: unitree_hg motors report a list (winding, case), Dex1 (unitree_go) one int."""
+    if t is None:
+        return None
+    return max(int(x) for x in t) if hasattr(t, "__iter__") else int(t)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--iface", default="auto")
@@ -135,13 +142,13 @@ def main():
             mode_machine=int(m.mode_machine), tick=int(m.tick),
             rpy_rad=[round(float(x), 4) for x in m.imu_state.rpy],
             knee_load_nm=round(abs(ms[L_KNEE].tau_est) + abs(ms[R_KNEE].tau_est), 1),
-            motor_temp_c=[max(int(x) for x in ms[i].temperature) for i in range(29)],
+            motor_temp_c=[max_temp(ms[i].temperature) for i in range(29)],
             motor_error=[int(ms[i].motorstate) for i in range(29)],
             q=[round(float(ms[i].q), 4) for i in range(29)])
     g = tp["grip_state"].last
     if g is not None and len(g.states):
         rep["grip_state"].update(q=round(float(g.states[0].q), 3),
-                                 temp_c=int(max(g.states[0].temperature)) if hasattr(g.states[0], "temperature") else None)
+                                 temp_c=max_temp(getattr(g.states[0], "temperature", None)))
     for name, t in bms.items():
         if t.last is not None:
             b = t.last

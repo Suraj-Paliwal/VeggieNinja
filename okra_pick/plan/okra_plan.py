@@ -14,7 +14,7 @@ jaws closing ACROSS the pod. Segments:
   twist about the gripper axis in its first part: PULL_TWIST_DEG, TWIST_FRAC) -> retreat (straight, twist
   kept) -> home (joint space back to the start pose). The gripper stays closed at the end.
 
-Refuses (exit 2) if the pod is outside REACH_*, any waypoint has no IK within tolerance, a joint limit
+Refuses (exit 2) if the pod is outside PLAN_SANITY (bad depth; REACH_* is only a preference), any waypoint has no IK within tolerance, a joint limit
 margin is violated, or the hand passes through the torso box. Writes nothing in that case.
 """
 
@@ -148,9 +148,13 @@ def cosine_joint(q0, q1, speed):
 def plan(target):
     q29 = target["q"]
     p = np.asarray(target["xyz_pelvis"], float)
-    for v, (lo, hi), ax in zip(p, (C.REACH_X, C.REACH_Y, C.REACH_Z), "xyz"):
+    # Only a sanity limit here (a bad depth reading must not send the arm somewhere absurd); whether the arm can
+    # really get there is decided below by the IK, joint-limit margins and the torso check.
+    for v, (lo, hi), ax in zip(p, C.PLAN_SANITY, "xyz"):
         if not lo <= v <= hi:
-            raise PlanError("pod %s=%.3f m outside reach [%.2f, %.2f] (pelvis frame)" % (ax, v, lo, hi))
+            raise PlanError("pod %s=%.3f m outside the sanity limits [%.2f, %.2f] (pelvis frame): bad depth?" % (ax, v, lo, hi))
+    if not all(lo <= v <= hi for v, (lo, hi) in zip(p, (C.REACH_X, C.REACH_Y, C.REACH_Z))):
+        print("note: pod %s is outside the comfortable reach box; trying the IK anyway" % np.round(p, 3).tolist(), flush=True)
     arm = ArmModel(q29)
     shoulder = arm.fk(arm.q_start, arm.model.getFrameId("right_shoulder_pitch_link")).translation
 

@@ -16,6 +16,8 @@
 #   ./okra_pick.sh outcome [EVENT]      record whether the pick worked (asked automatically after 'pick')
 #   ./okra_pick.sh dataset              export human-confirmed events as a YOLO training set
 #   ./okra_pick.sh web [--host 0.0.0.0 --token T]   operator web interface on http://localhost:8080
+#   ./okra_pick.sh live start|stop|status  live head-camera feed for the web page (robot/live_cam.py, port 8091);
+#                                        look/floor and the recorder take the camera from it automatically
 #   ./okra_pick.sh safety [STEP] [EVENT]  run the live safety gate by hand (robot probe + VM + event checks)
 #
 # Every robot step first runs the safety gate (safety/safety_check.py, Guide 16): the robot is measured live
@@ -51,13 +53,19 @@ gate() {  # STEP [EVENT_DIR] [TRAJ]: live safety gate; exits on FAIL; sets IFACE
   IFACE=$(echo "$out" | sed -n 's/^IFACE=//p')
   [ $rc = 0 ] && [ -n "$IFACE" ] || { echo "SAFETY GATE: '$1' not run (see above)"; exit 3; }
 }
+# The live feed (robot/live_cam.py) lets go of the camera while a hold file exists (content = expiry, robot clock).
+hold_camera() {  # WHO SECONDS: ask the live feed to release the camera, wait until it has (max 3 s)
+  run "mkdir -p /tmp/okra_live_hold && echo \$(( \$(date +%s) + $2 )) > /tmp/okra_live_hold/$1
+       for i in \$(seq 30); do pgrep -f '^[^ ]*python[^ ]* [^ ]*live_cam\.py' >/dev/null || break
+         grep -q '\"source\": \"camera\"' /tmp/okra_live_state.json 2>/dev/null || break; sleep 0.1; done"; }
+release_camera() { run "rm -f /tmp/okra_live_hold/$1" || true; }
 free_camera() { run "/unitree/sbin/mscli getservice video_hub_pc4 | grep -q 'status:0' && /unitree/sbin/mscli stopservice video_hub_pc4 >/dev/null; true"; }
 
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   deploy)
     run "mkdir -p $rdir/robot $rdir/okra_robot/models $rdir/runs $rdir/events"
-    scp -q "$here"/robot/{okra_perceive.py,candidates.py,arm_player.py,pick_config.py,g1_chain.py,g1.urdf,body_pose.py,closed_loop.py,safety_probe.py} "$host:$rdir/robot/"
+    scp -q "$here"/robot/{okra_perceive.py,live_cam.py,candidates.py,arm_player.py,pick_config.py,g1_chain.py,g1.urdf,body_pose.py,closed_loop.py,safety_probe.py} "$host:$rdir/robot/"
     scp -q "$J"/okra_robot/{okra_detector.py,okra_filter.py} "$host:$rdir/okra_robot/"
     rsync -a "$J"/okra_robot/models/ "$host:$rdir/okra_robot/models/"
     run "cd $rdir/robot && $PY_DET -c 'import pyrealsense2, torch, ultralytics, okra_perceive; print(\"perceive env ok, cuda\", torch.cuda.is_available())' 2>&1 | tail -1;
@@ -78,12 +86,14 @@ case "$cmd" in
     ;;
   floor)
     gate floor
+    hold_camera floor 120; trap 'release_camera floor' EXIT
     free_camera
     run "cd $rdir/robot && $PY_DET okra_perceive.py --floor-check --iface $IFACE 2>&1 | grep -v -i warning"
     ;;
   perceive)
     gate look
     d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())"); r=$(basename "$d")
+    hold_camera look 180; trap 'release_camera look' EXIT
     free_camera
     run "cd $rdir/robot && $PY_DET okra_perceive.py --iface $IFACE --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
     rsync -a "$host:$rdir/events/$r/" "$d/" || { echo "no event bundle (see above)"; exit 1; }
@@ -93,6 +103,7 @@ case "$cmd" in
   look)   # perceive only (the web interface asks the question itself); prints EVENT_DIR=<path>
     gate look
     d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())"); r=$(basename "$d")
+    hold_camera look 180; trap 'release_camera look' EXIT
     free_camera
     run "cd $rdir/robot && $PY_DET okra_perceive.py --iface $IFACE --weights ~/$rdir/okra_robot/models/$WEIGHTS --event-dir ~/$rdir/events/$r 2>&1 | grep -v -iE 'warning|settings'"
     rsync -a "$host:$rdir/events/$r/" "$d/" || { echo "no event bundle (see above)"; exit 1; }
@@ -108,6 +119,22 @@ case "$cmd" in
     ;;
   dataset)
     "$PY_VM" "$HITL/export_dataset.py" "$@"
+    ;;
+  live)
+    case "${1:-status}" in
+      start)
+        free_camera
+        run "cd $rdir/robot && if pgrep -f '^[^ ]*python[^ ]* [^ ]*live_cam\.py' >/dev/null; then echo 'live feed already running'; else
+             PYTHONUNBUFFERED=1 nohup $PY_DET live_cam.py --host ${host#*@} --weights ~/$rdir/okra_robot/models/$WEIGHTS > ~/$rdir/live.log 2>&1 < /dev/null &
+             sleep 5; tail -4 ~/$rdir/live.log; fi"
+        ;;
+      stop) run "pkill -f '^[^ ]*python[^ ]* [^ ]*live_cam\.py' && echo 'live feed stopped' || echo 'live feed not running'" ;;
+      status)
+        run "pgrep -af '^[^ ]*python[^ ]* [^ ]*live_cam\.py' || echo 'live feed not running'
+             curl -s --max-time 2 http://${host#*@}:8091/status; echo; tail -3 ~/$rdir/live.log 2>/dev/null" || true
+        ;;
+      *) echo "usage: live start|stop|status"; exit 2 ;;
+    esac
     ;;
   web)
     exec "$PY_VM" "$here/web/server.py" "$@"
@@ -150,5 +177,5 @@ case "$cmd" in
     "$0" plan
     echo "check $(rundir)/question.jpg / annotated.jpg and sim.mp4, then: ./okra_pick.sh reach (first time) or ./okra_pick.sh pick"
     ;;
-  *) sed -n '2,23p' "$0"; exit 2 ;;
+  *) sed -n '2,27p' "$0"; exit 2 ;;
 esac

@@ -24,6 +24,7 @@ Every report in this folder is at most 150 lines. Verified on 2026-09-26.
 | 14 | [14_spatial_awareness_closed_loop.md](14_spatial_awareness_closed_loop.md) | Body pose from legs + IMU; closed-loop reach that follows body motion |
 | 15 | [15_vm_tuning.md](15_vm_tuning.md) | VM disk resize, VirtualBox settings (GUI), green turtle / Hyper-V fix |
 | 16 | [16_robot_run_checklist.md](16_robot_run_checklist.md) | Run day: what runs where, live safety gate before every step, STOP layers, link loss, checklist |
+| 17 | [17_live_feed.md](17_live_feed.md) | Live head camera in the web page (encoded on the Orin, VM only relays); auto-look: ask per okra, then plan → pick → outcome → next |
 
 ## System at a glance
 

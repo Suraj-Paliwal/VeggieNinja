@@ -28,6 +28,11 @@ case "${1:-status}" in
     name=${2:?usage: rec.sh start NAME [recorder options]}; shift 2
     if running; then echo "already recording (./rec.sh stop first)"; exit 1; fi
     scp -q "$here"/robot/recorder.py "$host:$rdir/"          # always run the current version
+    # The web live feed (okra_pick/robot/live_cam.py) lets go of the camera during this hold and then shows
+    # the recorder's local copy instead; the hold only has to cover the hand-over.
+    run "mkdir -p /tmp/okra_live_hold && echo \$(( \$(date +%s) + 30 )) > /tmp/okra_live_hold/record
+         for i in \$(seq 30); do pgrep -f '^[^ ]*python[^ ]* [^ ]*live_cam\.py' >/dev/null || break
+           grep -q '\"source\": \"camera\"' /tmp/okra_live_state.json 2>/dev/null || break; sleep 0.1; done"
     # Unitree's videohub holds the head camera; stop it (restart with ./rec.sh release).
     run "/unitree/sbin/mscli getservice video_hub_pc4 | grep -q 'status:0' && /unitree/sbin/mscli stopservice video_hub_pc4 >/dev/null; sleep 1; true"
     ep="episodes/${name}_$(date +%Y%m%d_%H%M%S)"
@@ -41,7 +46,8 @@ case "${1:-status}" in
   stop)
     running || { echo "not recording"; exit 0; }
     run "kill -INT \$(cat $pidf); for i in \$(seq 600); do kill -0 \$(cat $pidf) 2>/dev/null || break; sleep 0.5; done; \
-         cd $rdir && tail -3 \$(cat current)/recorder.log && ls -lh \$(cat current) && rm -f recorder.pid"
+         cd $rdir && tail -3 \$(cat current)/recorder.log && ls -lh \$(cat current) && rm -f recorder.pid; \
+         rm -f /tmp/okra_live_hold/record"
     ;;
   status)
     if running; then echo "RECORDING $(run "cat $rdir/current")"; else echo "not recording"; fi
