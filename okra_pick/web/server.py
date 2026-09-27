@@ -249,7 +249,7 @@ class AutoLook(threading.Thread):
         def after_move(rc):
             ch["step"] = ("cancelled (STOP)" if ch["cancelled"] else
                           "%s done: answer 'did it pick?'" % kind if rc == 0 else "%s ended with exit %s: answer the outcome" % (kind, rc))
-        app.jobs.start("plan", [sh, "plan", eid], then=after_plan, keep_log=True)
+        app.start_plan(ev, then=after_plan, keep_log=True)
 
     def cancel(self):
         """STOP: no further chain step starts, auto-look is disarmed (re-arm by hand)."""
@@ -349,6 +349,116 @@ def live_get_bytes(path, timeout=3.0):
     return body
 
 
+# ------------------------------------------------------------------ record everything
+
+CAMERA_JOBS = ("look", "auto-look", "floor")       # steps that need the camera itself (they pause the recording)
+
+
+class RecordAll(threading.Thread):
+    """While on: keep a recording ("all_<time>") running on the robot, so every step is on video with all joint/IMU
+    data. Camera steps (Look, floor) stop it themselves (okra_pick.sh free_camera) and this starts the next one as
+    soon as they are done. Every finished recording is copied to the VM (g1_record/data) for the page."""
+
+    def __init__(self, app):
+        super().__init__(daemon=True)
+        self.app, self.on, self.status, self.pulled, self.last_try = app, False, "off", set(), 0.0
+
+    def rec(self, *args, timeout=60):
+        return subprocess.run([os.path.join(J, "g1_record", "rec.sh")] + list(args), capture_output=True, text=True,
+                              timeout=timeout)
+
+    def run(self):
+        while True:
+            time.sleep(3.0)
+            try:
+                self.tick()
+            except Exception as e:  # noqa: BLE001 - robot offline etc.: try again later
+                self.status = "error: %s" % e
+
+    def tick(self):
+        if not self.on and time.time() - getattr(self, "t_idle", 0) < 30:   # off: only look for new recordings now and then
+            return
+        self.t_idle = time.time()
+        st = self.rec("status", timeout=15).stdout
+        recording = st.startswith("RECORDING")
+        self.app.poll.recording = st.splitlines()[0] if st else self.app.poll.recording
+        self.pull_finished(st if recording else "")
+        if not self.on:
+            self.status = "off"
+            return
+        job = self.app.jobs
+        if recording:
+            self.status = "recording: " + st.splitlines()[0].split("/")[-1]
+            return
+        if job.running and job.name in CAMERA_JOBS:
+            self.status = "paused: %s needs the camera" % job.name
+            return
+        if time.time() - self.last_try < 10:                  # do not hammer a failing start
+            return
+        self.last_try = time.time()
+        r = self.rec("start", "all_" + time.strftime("%Y%m%d_%H%M%S"), timeout=60)
+        self.status = "started" if r.returncode == 0 else "could not start: %s" % (r.stdout + r.stderr).strip()[-120:]
+
+    def pull_finished(self, current):
+        """Copy finished recordings from the robot that the VM does not have yet (in the background, one at a time)."""
+        if getattr(self, "pulling", False):
+            return
+        lst = self.rec("list", timeout=20).stdout.split()
+        names = [n for n in lst if n.startswith(("all_", "okra_", "web_")) and n not in self.pulled
+                 and n not in current and not os.path.isdir(os.path.join(REC, n))]
+        if not names:
+            return
+
+        def pull(n):
+            self.pulling = True
+            try:
+                self.rec("pull", n, timeout=900)
+                d = os.path.join(REC, n)
+                if os.path.isfile(os.path.join(d, "color.mkv")):
+                    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", os.path.join(d, "color.mkv"), "-c", "copy",
+                                    "-movflags", "+faststart", os.path.join(d, "color.mp4")], timeout=300)
+                self.pulled.add(n)
+            finally:
+                self.pulling = False
+        threading.Thread(target=pull, args=(names[0],), daemon=True).start()
+
+
+# ------------------------------------------------------------------ recordings (g1_record/data)
+
+REC = os.path.join(J, "g1_record", "data")
+
+
+def episode_dir(name):
+    d = os.path.realpath(os.path.join(REC, str(name or "")))
+    if not d.startswith(os.path.realpath(REC) + os.sep) or not os.path.isdir(d):
+        raise ValueError("no such recording: %s" % name)
+    return d
+
+
+def episodes():
+    out = []
+    for n in sorted(os.listdir(REC), reverse=True) if os.path.isdir(REC) else []:
+        d = os.path.join(REC, n)
+        if not os.path.isfile(os.path.join(d, "color.mkv")):
+            continue
+        meta = {}
+        try:
+            meta = json.load(open(os.path.join(d, "meta.json")))
+        except (OSError, ValueError):
+            pass
+        ts = os.path.join(d, "color_ts.txt")
+        dur = None
+        try:
+            v = [float(l) for l in open(ts) if l.strip() and not l.startswith("#")]
+            dur = round((v[-1] - v[0]) / 1000.0, 1)
+        except (OSError, ValueError, IndexError):
+            pass
+        out.append({"name": n, "duration_s": dur, "start_time": meta.get("start_time"),
+                    "camera": "/rec/%s/color.mp4" % n if os.path.exists(os.path.join(d, "color.mp4")) else None,
+                    "replay": "/rec/%s/replay_sim.mp4" % n if os.path.exists(os.path.join(d, "replay_sim.mp4")) else None})
+    return out
+
+
 # ------------------------------------------------------------------ background jobs
 
 class Jobs:
@@ -401,7 +511,34 @@ class App:
         self.live = LiveRelay()
         self.auto = AutoLook(self)
         self.auto.start()
+        self.recall = RecordAll(self)
+        self.recall.start()
         self.event = store.find()
+
+    def start_plan(self, ev, then=None, keep_log=False):
+        """Plan (okra_pick.sh plan: safety gate + planner + sim video). If refused: keep the reason in plan_error.json
+        and make the best-effort attempt video (plan/attempt_sim.py, VM only, nothing moves), so the page can show
+        why. then(rc) runs after the plan (before the attempt video)."""
+        eid = os.path.basename(ev)
+
+        def done(rc, log):
+            if rc == 0:
+                for f in ("plan_error.json",):
+                    if os.path.exists(os.path.join(ev, f)):
+                        os.remove(os.path.join(ev, f))
+                return
+            i = next((k for k, l in enumerate(log) if "REFUSED" in l or "SAFETY GATE" in l), None)
+            store.save(ev, "plan_error.json", {"reason": "\n".join(log[i:i + 8]) if i is not None else "\n".join(log[-8:]),
+                                               "safety_gate": any("SAFETY GATE" in l for l in log), "time": time.time()})
+
+        def after(rc):
+            if then:
+                then(rc)
+            err = store.load(ev, "plan_error.json")
+            if rc != 0 and err and not err["safety_gate"] and not self.jobs.running:
+                self.jobs.start("attempt video", [PY_VM, os.path.join(OKRA, "plan", "attempt_sim.py"), ev],
+                                env={"MUJOCO_GL": "egl"}, keep_log=True)
+        self.jobs.start("plan", [PICK_SH, "plan", eid], on_done=done, then=after, keep_log=keep_log)
 
     def rel(self, path):
         return os.path.relpath(path, store.ROOT)
@@ -414,7 +551,7 @@ class App:
         pend = store.load(ev, "decision_pending.json")
         dec = store.load(ev, "decision.json")
         tr = store.load(ev, "trajectory.json")
-        files = {f: "/data/%s/%s" % (self.rel(ev), f) for f in ("question.jpg", "question_view.jpg", "annotated.jpg", "sim.mp4", "trigger_live.jpg")
+        files = {f: "/data/%s/%s" % (self.rel(ev), f) for f in ("question.jpg", "question_view.jpg", "annotated.jpg", "sim.mp4", "trigger_live.jpg", "attempt_sim.mp4")
                  if os.path.exists(os.path.join(ev, f))}
         cands = [{k: c[k] for k in ("id", "conf_median", "conf_max", "seen_frac", "accepted_frac", "reject_reasons",
                                     "in_reach", "px", "key_mask", "xyz_pelvis", "length_m")}
@@ -424,15 +561,19 @@ class App:
                 "plan": None if not tr else {"duration_s": round(tr["duration_s"], 1), "pitch": tr["approach_pitch_deg"],
                                              "segments": [s["name"] for s in tr["segments"]]},
                 "executed": store.load(ev, "trajectory_executed.json"), "outcome": store.load(ev, "outcome.json"),
-                "files": files, "detector": cj.get("detector"), "trigger": store.load(ev, "trigger.json")}
+                "files": files, "detector": cj.get("detector"), "trigger": store.load(ev, "trigger.json"),
+                "looked_at": cj.get("time"), "target_xyz": (store.load(ev, "target.json") or {}).get("xyz_pelvis"),
+                "plan_error": store.load(ev, "plan_error.json"), "attempt": store.load(ev, "attempt_result.json")}
 
     def state(self):
         return {"robot": self.poll.robot, "robot_error": self.poll.robot_err, "recording": self.poll.recording,
                 "job": self.jobs.state(), "event": self.event_view(), "agent": AGENT, "live": self.live.state(), "auto": self.auto.settings(),
+                "record_all": {"on": self.recall.on, "status": self.recall.status},
                 "time": time.time()}
 
 
 APP = None
+PLACE = {}
 
 
 # ------------------------------------------------------------------ HTTP
@@ -460,12 +601,28 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(path):
             return self._json({"error": "not found"}, 404)
         data = open(path, "rb").read()
-        self.send_response(200)
+        rng = self.headers.get("Range", "")                  # video seeking: "bytes=START-[END]"
+        start, end, code = 0, len(data) - 1, 200
+        if rng.startswith("bytes=") and data:
+            a, _, b = rng[6:].split(",")[0].partition("-")
+            try:
+                start = int(a) if a else max(0, len(data) - int(b))
+                end = min(len(data) - 1, int(b)) if a and b else len(data) - 1
+                code = 206
+            except ValueError:
+                pass
+        self.send_response(code)
         self.send_header("Content-Type", ctype or mimetypes.guess_type(path)[0] or "application/octet-stream")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Accept-Ranges", "bytes")
+        if code == 206:
+            self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, len(data)))
+        self.send_header("Content-Length", str(end - start + 1))
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data[start:end + 1])
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _bytes(self, data, ctype):
         self.send_response(200)
@@ -517,6 +674,26 @@ class Handler(BaseHTTPRequestHandler):
             if APP.live.jpeg is None:
                 return self._json({"error": "no live frame yet"}, 503)
             return self._bytes(APP.live.jpeg, "image/jpeg")
+        if url.path == "/api/place":                    # placement guide: one reading from the live detection
+            try:
+                if "pg" not in PLACE:
+                    sys.path.insert(0, os.path.join(OKRA, "tools"))
+                    import place_guide as pg
+                    PLACE["pg"], PLACE["chain"] = pg, pg.Chain(os.path.join(OKRA, "robot", "g1.urdf"))
+                pg = PLACE["pg"]
+                rs, z_pod, eid = pg.camera()
+                msg, inside = pg.reading(PLACE["chain"], rs, z_pod)
+                h = ("pod height measured by Look %s" % eid) if z_pod is not None else "pod height ASSUMED ~90 cm"
+                return self._json({"ok": True, "text": msg, "inside": inside, "height": h})
+            except (Exception, SystemExit) as e:  # noqa: BLE001 - robot / feed offline
+                return self._json({"ok": False, "text": "guide unavailable: %s" % e})
+        if url.path == "/api/episodes":
+            return self._json({"episodes": episodes()})
+        if url.path.startswith("/rec/"):
+            p = os.path.realpath(os.path.join(REC, urllib.parse.unquote(url.path[5:])))
+            if not p.startswith(os.path.realpath(REC) + os.sep) or not p.endswith((".mp4", ".jpg")):
+                return self._json({"error": "forbidden"}, 403)
+            return self._file(p)
         if url.path.startswith("/data/"):
             p = os.path.realpath(os.path.join(store.ROOT, urllib.parse.unquote(url.path[6:])))
             if not p.startswith(os.path.realpath(store.ROOT) + os.sep):
@@ -570,7 +747,16 @@ class Handler(BaseHTTPRequestHandler):
                 app.auto.start_chain(ev, kind)
             return {"ok": True, "decision": dec, "chain": app.auto.chain if dec.get("target") else None, "note": note}
         if path == "/api/plan":
-            app.jobs.start("plan", [sh, "plan", os.path.basename(ev)])
+            app.start_plan(ev)
+            return {"ok": True}
+        if path == "/api/attempt":                      # best-effort grab video for this event (VM only)
+            app.jobs.start("attempt video", [PY_VM, os.path.join(OKRA, "plan", "attempt_sim.py"), ev], env={"MUJOCO_GL": "egl"})
+            return {"ok": True}
+        if path == "/api/replay":                       # camera + simulation replay of a recording (VM only)
+            epd = episode_dir(b.get("episode"))
+            cmd = ("cd %s && ( [ -f color.mp4 ] || ffmpeg -loglevel error -y -i color.mkv -c copy -movflags +faststart color.mp4 ) "
+                   "&& %s %s %s" % (epd, PY_VM, os.path.join(OKRA, "plan", "replay_episode.py"), epd))
+            app.jobs.start("replay " + os.path.basename(epd), ["bash", "-c", cmd], env={"MUJOCO_GL": "egl"})
             return {"ok": True}
         if path == "/api/execute":
             kind = b.get("kind")
@@ -578,7 +764,12 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("kind must be dry, reach or pick")
             if kind != "dry" and b.get("confirm") != kind.upper():
                 raise ValueError("type %s to confirm" % kind.upper())
-            app.jobs.start(kind, [sh, kind, os.path.basename(ev), "--yes"], env={"OKRA_NONINTERACTIVE": "1"})
+            env = {"OKRA_NONINTERACTIVE": "1"}
+            if kind == "reach" and b.get("hold"):              # hold at the pod (place it / look), optional jaw test
+                env["OKRA_HOLD"] = str(int(min(60, max(0, float(b["hold"])))))
+                if b.get("jaw_cycle") and float(b["hold"]) >= 10:
+                    env["OKRA_JAW_CYCLE"] = "1"
+            app.jobs.start(kind, [sh, kind, os.path.basename(ev), "--yes"], env=env)
             return {"ok": True}
         if path == "/api/outcome":
             if b.get("result") not in ("success", "fail", "partial", "skipped"):
@@ -605,6 +796,32 @@ class Handler(BaseHTTPRequestHandler):
             args = [sh, "safety", step] + ([os.path.basename(ev)] if ev and step in ("plan", "dry", "reach", "pick") else [])
             app.jobs.start("safety " + step, args)
             return {"ok": True}
+        if path == "/api/setup":                        # link check, deploy code, camera floor check (nothing moves)
+            act = b.get("action")
+            cmds = {"check": [os.path.join(J, "g1_connect", "check.sh")],
+                    "deploy": ["bash", "-c", "%s deploy && %s deploy" % (PICK_SH, os.path.join(J, "robot_agent", "agent.sh"))],
+                    "floor": [PICK_SH, "floor"]}
+            if act not in cmds:
+                raise ValueError("action must be check, deploy or floor")
+            app.jobs.start({"check": "link check", "deploy": "deploy", "floor": "floor check"}[act], cmds[act])
+            return {"ok": True}
+        if path == "/api/point":                        # fixed-point target from the live joint state, then plan
+            def done(rc, log):
+                d = next((l.split("=", 1)[1] for l in log if l.startswith("EVENT_DIR=")), None)
+                if rc == 0 and d:
+                    app.event = d
+
+            def then(rc):
+                if rc == 0 and app.event:
+                    app.start_plan(app.event, keep_log=True)
+            args = [sh, "point"] + ([str(float(v)) for v in b["xyz"]] if b.get("xyz") else [])
+            app.jobs.start("fixed point", args, on_done=done, then=then)
+            return {"ok": True}
+        if path == "/api/record_all":
+            app.recall.on = bool(b.get("on"))
+            if not app.recall.on:
+                app.jobs.start("record stop", [os.path.join(J, "g1_record", "rec.sh"), "stop"])
+            return {"ok": True, "record_all": {"on": app.recall.on}}
         if path == "/api/record":
             act = b.get("action")
             if act == "start":

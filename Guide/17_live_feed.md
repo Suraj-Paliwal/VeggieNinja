@@ -126,3 +126,14 @@ It uses its own ports and hold directory.
 
 Open points: `/dev/video4` for V4L2 colour is taken from the recorder (it worked there). The overlay model shares
 the Orin GPU with `okra_perceive.py` (two small YOLO models, expected to fit).
+
+## Step by step, recordings, record everything (2026-09-27)
+
+- **Step by step** card: the selected okra's whole story: Look images + measured position → your answer → plan
+  (simulation video) or **refused** (reason in plain words + `attempt_sim.mp4`: how far the arm gets, body collisions;
+  made automatically, VM only, never sent to the robot) → motion → outcome → videos recorded around it.
+- **Recordings** card: every `g1_record/data` episode: ▶ camera, ▶ replay (camera + simulation from the logged joints,
+  `plan/replay_episode.py`), or "make replay".
+- **record everything** (Recording section): keeps an `all_<time>` recording running; Look/floor pause it (the camera is
+  exclusive) and it restarts right after; finished recordings are copied to the VM automatically. Reach/pick then use
+  the running recording. **Not yet tested on the robot.** `?live=0` opens the page without the video stream.

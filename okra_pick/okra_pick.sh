@@ -16,6 +16,9 @@
 #   ./okra_pick.sh outcome [EVENT]      record whether the pick worked (asked automatically after 'pick')
 #   ./okra_pick.sh dataset              export human-confirmed events as a YOLO training set
 #   ./okra_pick.sh web [--host 0.0.0.0 --token T]   operator web interface on http://localhost:8080
+#   ./okra_pick.sh point [X Y Z]         target a fixed spot (pelvis frame, m; default: the comfortable zone's middle)
+#                                        from the live joint state, then plan / dry / reach it; OKRA_HOLD=S makes
+#                                        reach hold there S s (place the pod at the gripper)
 #   ./okra_pick.sh live start|stop|status  live head-camera feed for the web page (robot/live_cam.py, port 8091);
 #                                        look/floor and the recorder take the camera from it automatically
 #   ./okra_pick.sh safety [STEP] [EVENT]  run the live safety gate by hand (robot probe + VM + event checks)
@@ -59,7 +62,13 @@ hold_camera() {  # WHO SECONDS: ask the live feed to release the camera, wait un
        for i in \$(seq 30); do pgrep -f '^[^ ]*python[^ ]* [^ ]*live_cam\.py' >/dev/null || break
          grep -q '\"source\": \"camera\"' /tmp/okra_live_state.json 2>/dev/null || break; sleep 0.1; done"; }
 release_camera() { run "rm -f /tmp/okra_live_hold/$1" || true; }
-free_camera() { run "/unitree/sbin/mscli getservice video_hub_pc4 | grep -q 'status:0' && /unitree/sbin/mscli stopservice video_hub_pc4 >/dev/null; true"; }
+free_camera() {  # the camera must be free for pyrealsense2: stop videohub, and pause a running recording
+  if "$J/g1_record/rec.sh" status 2>/dev/null | head -1 | grep -q '^RECORDING'; then
+    echo "recording paused for this step (the camera is needed; 'record everything' starts a new one afterwards)"
+    "$J/g1_record/rec.sh" stop >/dev/null || true
+  fi
+  stop_videohub; }
+stop_videohub() { run "/unitree/sbin/mscli getservice video_hub_pc4 | grep -q 'status:0' && /unitree/sbin/mscli stopservice video_hub_pc4 >/dev/null; true"; }
 
 cmd="${1:-help}"; shift || true
 case "$cmd" in
@@ -100,6 +109,32 @@ case "$cmd" in
     echo "event $r -> $d"
     "$PY_VM" "$HITL/confirm.py" "$d" "$@"
     ;;
+  point)  # a target at a fixed spot, no perception: the operator hangs the pod where the arm goes
+    gate status
+    d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())")
+    run "cd $rdir/robot && PYTHONPATH=~/g1_rec/pylib timeout 30 python3 safety_probe.py 2>/dev/null | tail -1" > "$d/probe.json"
+    HERE_OKRA="$here" "$PY_VM" - "$d" "$@" <<'PY'
+import json, os, sys
+sys.path.insert(0, os.path.join(os.environ.get("HERE_OKRA", "."), "robot"))
+d, a = sys.argv[1], [float(x) for x in sys.argv[2:5]]
+pr = json.load(open(os.path.join(d, "probe.json")))
+ls = pr.get("lowstate") or {}
+if not ls.get("q"):
+    sys.exit("no live joint state from the robot probe")
+import pick_config as C
+xyz = a if len(a) == 3 else [sum(r) / 2 for r in C.PLACE_ZONE]
+tgt = {"xyz_pelvis": xyz, "axis_pelvis": [0.0, 0.0, 1.0], "length_m": 0.10, "q": ls["q"], "source": "fixed_point",
+       "perceived_at_robot": pr["robot_time"], "note": "no perception: the operator places the pod where the arm goes"}
+json.dump(tgt, open(os.path.join(d, "target.json"), "w"), indent=1)
+json.dump({"q": ls["q"], "imu_rpy": ls.get("rpy_rad"), "source": "fixed_point", "time": pr["robot_time"]},
+          open(os.path.join(d, "robot_state.json"), "w"))
+json.dump({"action": "fixed_point", "target": 1, "asked": False, "reasons": ["operator: fixed point"], "labels": {}},
+          open(os.path.join(d, "decision.json"), "w"))
+print("fixed point %s (pelvis frame) from the live joint state" % [round(v, 3) for v in xyz])
+PY
+    echo "EVENT_DIR=$d"
+    echo "next: ./okra_pick.sh plan $(basename "$d")  ->  dry  ->  OKRA_HOLD=20 ./okra_pick.sh reach"
+    ;;
   look)   # perceive only (the web interface asks the question itself); prints EVENT_DIR=<path>
     gate look
     d=$("$PY_VM" -c "import sys; sys.path.insert(0,'$HITL'); import store; print(store.new_event_dir())"); r=$(basename "$d")
@@ -123,7 +158,7 @@ case "$cmd" in
   live)
     case "${1:-status}" in
       start)
-        free_camera
+        stop_videohub      # (a running recording is fine: the feed then shows its copy)
         run "cd $rdir/robot && if pgrep -f '^[^ ]*python[^ ]* [^ ]*live_cam\.py' >/dev/null; then echo 'live feed already running'; else
              PYTHONUNBUFFERED=1 nohup $PY_DET live_cam.py --host ${host#*@} --weights ~/$rdir/okra_robot/models/$WEIGHTS > ~/$rdir/live.log 2>&1 < /dev/null &
              sleep 5; tail -4 ~/$rdir/live.log; fi"
@@ -159,14 +194,19 @@ case "$cmd" in
     fi
     confirm "$cmd"
     [ $yes_flag = 1 ] || gate "$cmd" "$d" "$d/trajectory.json"     # again: time passed at the prompt
-    extra=""; [ "$cmd" = reach ] && extra="--until approach"
-    "$J/g1_record/rec.sh" start "okra_${cmd}_$r" >/dev/null && echo "recording started"
+    extra=""; [ "$cmd" = reach ] && extra="--until approach${OKRA_HOLD:+ --hold $OKRA_HOLD}${OKRA_JAW_CYCLE:+ --jaw-cycle}"
+    own_rec=0
+    if "$J/g1_record/rec.sh" status 2>/dev/null | head -1 | grep -q '^RECORDING'; then
+      echo "a recording is already running (record everything): the motion is in it"
+    else
+      "$J/g1_record/rec.sh" start "okra_${cmd}_$r" >/dev/null && own_rec=1 && echo "recording started"
+    fi
     set +e
     tflag=-t; [ -n "$OKRA_NONINTERACTIVE" ] && tflag=-T
     ssh $tflag -o ConnectTimeout=5 "$host" "cd $rdir/robot && $PY_ARM arm_player.py ~/$rdir/runs/$r/trajectory.json --iface $IFACE $extra"
     rc=$?
     set -e
-    sleep 1; "$J/g1_record/rec.sh" stop | tail -1
+    sleep 1; [ $own_rec = 1 ] && "$J/g1_record/rec.sh" stop | tail -1
     scp -q "$host:$rdir/runs/$r/"{trajectory_executed.json,player.log} "$d/" 2>/dev/null || true
     echo "player exit code $rc; video: g1_record/rec.sh pull, episode okra_${cmd}_$r"
     [ "$cmd" = pick ] && [ -z "$OKRA_NONINTERACTIVE" ] && "$PY_VM" "$HITL/outcome.py" "$d" --episode "okra_${cmd}_$r" || true

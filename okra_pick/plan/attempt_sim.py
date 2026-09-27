@@ -71,17 +71,29 @@ def grasp_gap(traj, q29):
 def main():
     ev = sys.argv[1].rstrip("/")
     target = json.load(open(os.path.join(ev, "target.json")))
-    best_effort = False
+    best_effort, hits, refused = False, [], None
     try:
         traj = P.plan(target)
     except P.PlanError as e:
+        refused = str(e)
         print("normal planner: REFUSED (%s)" % str(e).splitlines()[1].strip() if "\n" in str(e) else e)
         P.cartesian = truncated_cartesian
+        real_in_torso = P.ArmModel.in_torso
+
+        def record_torso(self, q):                     # picture only: report body collisions instead of refusing
+            h = real_in_torso(self, q)
+            if h:
+                hits.append(h)
+            return None
+        P.ArmModel.in_torso = record_torso
         try:
             traj = P.plan(target)
         finally:
-            P.cartesian = REAL_CARTESIAN
+            P.cartesian, P.ArmModel.in_torso = REAL_CARTESIAN, real_in_torso
         best_effort = True
+        if hits:
+            print("WARNING: in this motion the %s passes through the robot's torso (%d samples): the real robot "
+                  "would hit itself" % (" and ".join(sorted(set(hits))), len(hits)))
     gap = grasp_gap(traj, target["q"])
     if best_effort:
         traj["events"][0]["at"] = len(traj["q"]) + 1               # jaws never close: not a real grasp
@@ -93,7 +105,8 @@ def main():
     out = os.path.join(ev, "attempt_sim.mp4")
     subprocess.run([sys.executable, os.path.join(HERE, "sim_view.py"), tj, "--video", out], check=True,
                    env=dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl")))
-    json.dump({"normal_planner_ok": not best_effort, "grasp_gap_m": gap, "video": out},
+    json.dump({"normal_planner_ok": not best_effort, "grasp_gap_m": gap, "video": out,
+               "torso_hits": sorted(set(hits)) if best_effort else [], "refused_reason": refused},
               open(os.path.join(ev, "attempt_result.json"), "w"), indent=1)
 
 

@@ -49,7 +49,13 @@ class FakeRobot:
         return q
 
     def tau(self, idx):
-        return np.full(7, 20.0 if (self.scenario == "stuck_pod" and self.seg_now == "pull") else 2.0)
+        """Measured motor torque = what holds the arm up (the last gravity feed-forward sent, like on the robot:
+        measured 2026-09-27) + 2 Nm of motion/pull, or +20 Nm when the pod is stuck."""
+        extra = np.full(7, 20.0 if (self.scenario == "stuck_pod" and self.seg_now == "pull") else 2.0)
+        ff = getattr(self, "last_tau", None)
+        if ff is None:
+            return extra
+        return np.asarray(ff)[[k for k, i in enumerate(C.UPPER_IDX) if i in C.RIGHT_ARM_IDX]] - extra
 
     def tilt(self):
         bad = (self.scenario == "tilt_approach" and self.seg_now == "approach") or \
@@ -62,7 +68,8 @@ class FakeRobot:
         return 0.0
 
     # --- outputs
-    def send_arm(self, q_upper, weight):
+    def send_arm(self, q_upper, weight, tau_upper=None):
+        self.last_tau = tau_upper                                   # gravity feed-forward (checked by the tests)
         k = [k for k, i in enumerate(C.UPPER_IDX) if i in C.RIGHT_ARM_IDX]
         target = np.asarray(q_upper)[k]
         self.qarm += 0.6 * weight * (target - self.qarm)          # lagging tracker

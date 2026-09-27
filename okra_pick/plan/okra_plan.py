@@ -185,7 +185,38 @@ def plan(target):
     traj.update(approach_pitch_deg=pitch, close_axis_flipped=flip, target=target,
                 perceived_at_robot=target.get("perceived_at_robot"),      # robot clock: the player checks the age with it
                 pod_xyz=p.tolist(), approach_dir=approach_dir(p, shoulder, pitch).tolist())
+    traj["tau_ff"] = gravity_ff(q29, traj["q"])
     return traj
+
+
+_GRAV = {}
+
+
+def gravity_ff(q29, Q_arm):
+    """Gravity feed-forward per sample for arm_sdk motors 12..28 (waist, left arm, right arm): the torque that holds
+    the waist and the right arm against gravity with the right arm at each planned pose (waist and left arm stay at
+    q29). Model gravity (pelvis upright) times the per-joint scales fitted on the robot (pick_config.GRAVITY_SCALE);
+    the left arm gets none (it stays at rest, not fitted)."""
+    if not C.GRAVITY_FF_GAIN:
+        return None
+    if "m" not in _GRAV:
+        m = pin.buildModelFromUrdf(URDF)
+        order = [l.split('"')[1] for l in open(URDF) if "<joint " in l and 'type="revolute"' in l][:29]   # motor order
+        _GRAV.update(m=m, d=m.createData(), order=order,
+                     iq=[m.joints[m.getJointId(n)].idx_q for n in order], iv=[m.joints[m.getJointId(n)].idx_v for n in order])
+    m, d, order, iq, iv = _GRAV["m"], _GRAV["d"], _GRAV["order"], _GRAV["iq"], _GRAV["iv"]
+    scale = np.array([C.GRAVITY_SCALE.get(order[i], 1.0) if i in C.WAIST_IDX or i in C.RIGHT_ARM_IDX else 0.0
+                      for i in C.UPPER_IDX])
+    q = pin.neutral(m)
+    for k in range(29):
+        q[iq[k]] = q29[k]
+    out = []
+    for qa in Q_arm:
+        for k, i in enumerate(C.RIGHT_ARM_IDX):
+            q[iq[i]] = qa[k]
+        g = pin.computeGeneralizedGravity(m, d, q)
+        out.append(np.round(scale * np.array([g[iv[i]] for i in C.UPPER_IDX]), 3).tolist())
+    return out
 
 
 class PlanError(Exception):

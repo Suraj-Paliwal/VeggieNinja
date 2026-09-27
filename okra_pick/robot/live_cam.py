@@ -18,7 +18,7 @@ HTTP (robot network only):
                  placement guide drawn on every frame (computed on the VM from the calibrated camera model)
 
 Only one program can use the head camera. The source is chosen live, every 0.2 s:
-  recorder running (~/g1_rec/recorder.pid alive)  -> "relay": decode the recorder's own local copy
+  recorder running (~/g1_rec/recorder.pid alive)  -> "relay": decode the recorder's own local copy (outlines too)
                                                      (udp://127.0.0.1:5601), the camera stays with the recorder
   a hold file in /tmp/okra_live_hold/ not expired -> "paused": camera released for okra_perceive.py etc.
   otherwise                                       -> "camera": ffmpeg V4L2 on /dev/video4 (same as the recorder)
@@ -198,13 +198,13 @@ class Feed:
 
     def draw(self, img, t):
         self.last_raw = img.copy()
-        if self.overlay and self.source != "relay" and self.detector() is not None:
+        if self.overlay and self.detector() is not None:      # also on the recorder's copy (record everything)
             try:
                 dets = self.det.detect(img, return_rejected=True)
                 self.okra_hist.append((t, max([d["conf"] for d in dets if d["accepted"]] or [0.0])))
-                acc = [d for d in dets if d["accepted"]]
+                acc = [d for d in dets if d["accepted"]] or [d for d in dets if d["conf"] >= 0.5]   # else: filter-rejected
                 self.okra_px = ({"cx": round(float(acc[0]["cx"]), 1), "cy": round(float(acc[0]["cy"]), 1), "conf": round(acc[0]["conf"], 3),
-                                 "t": t} if acc else None)             # best accepted pod in the newest frame
+                                 "t": t, "rejected": None if acc[0]["accepted"] else acc[0]["reason"]} if acc else None)
                 for d in dets:
                     col = (0, 200, 0) if d["accepted"] else (0, 165, 255)
                     cv2.polylines(img, [np.asarray(d["mask"], np.int32)], True, col, 2 if d["accepted"] else 1)
@@ -252,7 +252,7 @@ class Feed:
         px = getattr(self, "okra_px", None)
         return {"frames": len(h), "hits": sum(c >= min_conf for c in h), "best_conf": round(max(h or [0.0]), 3),
                 "px": px if px and time.time() - px["t"] < 2.0 else None,
-                "min_conf": min_conf, "detecting": self.overlay and self.source in ("camera", "file")}
+                "min_conf": min_conf, "detecting": self.overlay and self.source in ("camera", "file", "relay")}
 
     def status(self, min_conf=0.5):
         return {"okra": self.okra(min_conf), "source": self.source, "fps": round(self.fps, 1), "clients": self.clients, "error": self.error,

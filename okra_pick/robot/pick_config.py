@@ -29,17 +29,30 @@ GRIP_SETTLE_S = 3.0                      # max wait for the jaws to stop
 # the pad centre sits ~0.09 m further along the gripper axis (dex1_1.urdf finger joints at 0.059+0.038).
 TCP_XYZ = (0.0415 + 0.09, -0.003, 0.0)   # CALIBRATE
 
+# ---- gravity feed-forward for arm_sdk (waist + right arm). Without it the PD springs sag under the arm's and
+# torso's weight: measured 2026-09-27 on the robot: shoulder pitch 7.9 deg, waist pitch 6.4 deg, gripper 9.5 cm off.
+# tau_ff = GRAVITY_FF_GAIN * scale[joint] * model gravity torque (pinocchio, g1.urdf); the per-joint scales were fitted
+# to the motor torques measured during that reach (the model has the rubber hand, the robot a heavier Dex1) and
+# checked on held-out samples (0.2-0.4 N m). 0 = off.
+GRAVITY_FF_GAIN = 1.0
+GRAVITY_SCALE = {"waist_yaw_joint": 1.0, "waist_roll_joint": 0.0, "waist_pitch_joint": 0.98, "right_shoulder_pitch_joint": 1.77, "right_shoulder_roll_joint": 1.27, "right_shoulder_yaw_joint": 2.34, "right_elbow_joint": 1.24, "right_wrist_roll_joint": 1.0, "right_wrist_pitch_joint": 2.93, "right_wrist_yaw_joint": 1.0}
+GRAVITY_TAU_MAX = 12.0                   # N m, clip per joint
+
 # ---- head camera mount: how the real D435 differs from the URDF (rotation vector in d435_link, degrees) ----
 # Measured with `okra_pick.sh floor` (robot standing, feet flat): it prints the value to put here; re-run until the
 # floor tilt is < 1 deg. A turn of the camera about the vertical is not observable from a floor (not included).
 CAM_CORR_ROTVEC_DEG = (-0.75, 3.90, -0.83)   # floor check 2026-09-27 on the robot: 2x10 frames, sd < 0.06 deg
-CLOSE_AXIS = "y"                         # wrist axis the jaws close along: "y" or "z"  (CALIBRATE)
+CLOSE_AXIS = "y"                         # wrist axis the jaws close along. VERIFIED 2026-09-27 (jaw test at the grasp
+                                         # pose, head camera: fingers upright, closing left-right as planned)
 
 # ---- grasp geometry (pelvis frame, metres) ----
 PREGRASP_BACK = 0.08                     # start of the straight approach, behind the pod (0.12 shrinks the reach, see Guide)
 GRASP_DEPTH = 0.01                       # go this far past the pod centre so it sits deep in the jaws
-PULL_BACK, PULL_DOWN = 0.06, 0.02        # harvesting pull after closing
-PULL_TWIST_DEG = 45.0                    # wrist twist about the gripper axis during the pull (0 = straight pull)
+# Harvest pull after closing. 2026-09-27 (operator): pull straight UP 5 cm, no twist: simpler and it keeps the most
+# wrist room (vertical pod: 38 deg on the approach). Detaches a pod whose stem is BELOW it (tip up, as okra grows).
+# Previous default (pod hanging from its stem): PULL_BACK, PULL_DOWN = 0.06, 0.02 and PULL_TWIST_DEG = 45.0.
+PULL_BACK, PULL_DOWN = 0.0, -0.05        # m; PULL_DOWN < 0 = upwards
+PULL_TWIST_DEG = 0.0                     # wrist twist about the gripper axis during the pull (0 = straight pull)
 TWIST_FRAC = 0.5                         # the twist happens during the first half of the pull, then pull straight
 TWIST_SPEED_DEG = 25.0                   # deg/s cap for the twist (~0.44 rad/s on the wrist, like the 0.5 rad/s joint cap)
 RETREAT_BACK = 0.15
@@ -70,6 +83,8 @@ MAX_TILT = 0.05                          # rad (~3 deg) to start
 ABORT_TILT_DRIFT = 0.08                  # rad (~5 deg) tilt change aborts
 MAX_TRACK_ERR = 0.30                     # rad commanded-vs-measured on any right-arm joint aborts
 MAX_PULL_TAU = 12.0                      # Nm on any right-arm joint during the pull aborts (release + retreat)
+MAX_PULL_EXTRA_TAU = 6.0                 # Nm beyond the planned gravity torque (plans with tau_ff): same margin as
+                                         # before gravity feed-forward (then ~6 Nm of the 12 was the arm's weight)
 MAX_CORRECTION = 0.03                    # m: body moved more than this since perception -> abort, look again
 CORRECT_HZ = 25.0                        # how often the closed-loop correction is recomputed
 MAX_WAIST_DIFF = 0.05                    # rad: waist now vs at perception (the plan assumes the same waist)

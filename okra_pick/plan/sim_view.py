@@ -88,7 +88,7 @@ def build_model(traj, base_z):
     gp.rgba = [1, 0, 0, 1]
 
     # ---- okra pod (mocap: stays put, then follows the gripper once grasped)
-    ax = np.array(traj["target"].get("axis_pelvis") or [0, 0, 1.0])
+    ax = np.array(traj["target"].get("axis_pelvis") or [0, 0, 1.0], float)
     ax /= np.linalg.norm(ax)
     L = max(0.06, min(0.2, traj["target"].get("length_m") or 0.10))
     pod_c = np.array(traj["pod_xyz"]) + off

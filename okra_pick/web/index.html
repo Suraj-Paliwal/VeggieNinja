@@ -72,6 +72,20 @@
   .autobox { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:10px; background:var(--bg); }
   .autobox label { cursor:pointer; }
   .autobox .row { margin:6px 0 2px; }
+  .story { display:flex; flex-direction:column; gap:12px; }
+  .sstep { border-left:4px solid var(--line); padding:4px 0 6px 12px; }
+  .sstep.done { border-color:var(--ok); } .sstep.bad { border-color:var(--bad); } .sstep.warn { border-color:var(--warn); } .sstep.todo { opacity:.55; }
+  .sstep h4 { margin:0 0 6px; font-size:14px; display:flex; gap:8px; align-items:center; }
+  .sstep h4 .tag { font-size:11px; font-weight:600; padding:2px 7px; border-radius:99px; background:var(--bg); border:1px solid var(--line); }
+  .sstep.done h4 .tag { background:var(--ok); color:#fff; border-color:var(--ok); }
+  .sstep.bad h4 .tag { background:var(--bad); color:#fff; border-color:var(--bad); }
+  .sstep.warn h4 .tag { background:var(--warn); color:#fff; border-color:var(--warn); }
+  .imgs { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:8px; }
+  .imgs figure { margin:0; } .imgs img, .imgs video { width:100%; border-radius:8px; display:block; }
+  .imgs figcaption { font-size:12px; color:var(--mute); margin-top:2px; }
+  pre.reason { background:var(--bg); border-radius:8px; padding:8px; font-size:12px; white-space:pre-wrap; margin:6px 0; }
+  .rec { border-bottom:1px solid var(--line); padding:6px 0; }
+  .rec video { width:100%; border-radius:8px; margin-top:6px; }
   .banner.ok { background:rgba(18,161,80,.12); } .banner.warn { background:rgba(232,144,12,.15); } .banner.bad { background:rgba(217,45,32,.12); }
 </style>
 </head>
@@ -122,8 +136,34 @@
       <div class="row"><button onclick="robot('gripper',{pos:'open'})">Open</button><button onclick="robot('gripper',{pos:'close'})">Close</button></div>
       <h3>Recording</h3>
       <div class="row"><button onclick="post('/api/record',{action:'start'})">● Start</button><button onclick="post('/api/record',{action:'stop'})">■ Stop</button></div>
+      <label title="keep a recording running all the time; it pauses by itself for each Look and resumes after"><input type="checkbox" id="recall" onchange="post('/api/record_all',{on:this.checked})"> record everything</label>
+      <div class="note" id="recall_st"></div>
       <h3>Say</h3>
       <div class="row"><input id="saytext" type="text" placeholder="text" style="flex:1"><button onclick="robot('say',{text:el('saytext').value})">Say</button></div>
+    </div>
+    <div class="card">
+      <h2>Setup &amp; tests</h2>
+      <h3>Start of a session (nothing moves)</h3>
+      <div class="row">
+        <button title="network, ssh, robot services, DDS state stream (g1_connect/check.sh)" onclick="post('/api/setup',{action:'check'})">1 Link check</button>
+        <button title="copy the latest robot code (okra_pick + robot agent) to the robot" onclick="post('/api/setup',{action:'deploy'})">2 Deploy code</button>
+        <button onclick="agent('start')">3 Start agent</button>
+        <button onclick="post('/api/live',{action:'start'})">4 Start camera feed</button>
+      </div>
+      <div class="note">Then bring-up in the Robot card: Damp → Ready → lower it → Start balance.</div>
+      <h3>Camera check (robot standing, floor clear)</h3>
+      <div class="row"><button title="compares the floor seen by the camera with the legs; prints the correction for pick_config.py" onclick="post('/api/setup',{action:'floor'})">Floor check</button></div>
+      <h3>Fixed-point reach (right arm only)</h3>
+      <div class="note">The arm goes to a fixed comfortable spot (42 cm out, 10 cm right, ~90 cm high), holds, comes back. Use it to test the arm, or hang the pod where the gripper is.</div>
+      <div class="row" style="margin-top:6px">
+        <button title="target from the live joint state + plan + simulation (nothing moves)" onclick="post('/api/point',{})">1 Make target + plan</button>
+        <button onclick="post('/api/execute',{kind:'dry'})">2 Dry run</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        hold <select id="holds"><option>10</option><option selected>20</option><option>30</option><option>60</option></select> s
+        <label><input type="checkbox" id="jawtest"> jaw test (close + open while holding)</label>
+      </div>
+      <div class="row" style="margin-top:6px"><button class="primary" onclick="reachHold()">3 Reach + hold</button></div>
     </div>
   </section>
 
@@ -146,6 +186,8 @@
         <button title="okra outlines drawn on the robot: green = passes the filter, orange = rejected" onclick="overlay(true)">Outlines on</button>
         <button onclick="overlay(false)">Outlines off</button>
       </div>
+      <div class="row" style="margin-top:6px"><label><input type="checkbox" id="guideon" onchange="guideTick()"> <b>placement guide</b>: tell me where to move the pod</label></div>
+      <div class="banner hidden" id="guidetxt"></div>
       <div class="note">The robot compresses the video and draws the outlines, then the VM passes it on unchanged. The Look step and recordings take the camera from the feed automatically; during a recording you see the recorder's copy (no outlines).</div>
     </div>
 
@@ -228,6 +270,12 @@
         <div id="outres" class="note"></div>
       </div>
     </div>
+
+    <div class="card">
+      <h2>Step by step <span class="note" id="storyid"></span></h2>
+      <div class="note" style="margin-bottom:8px">Everything that happened for the selected okra, in order. Pick another one in History.</div>
+      <div class="story" id="story"><span class="note">no event yet</span></div>
+    </div>
   </section>
 
   <!-- ============ right: log + history -->
@@ -237,6 +285,11 @@
       <h2>History</h2>
       <div class="row" style="margin-bottom:8px"><button onclick="post('/api/dataset',{})">Export training set</button><button onclick="loadEvents()">Refresh</button></div>
       <table><thead><tr><th>event</th><th>asked</th><th>answer</th><th>okra</th><th>outcome</th></tr></thead><tbody id="hist"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Recordings</h2>
+      <div class="note">Robot recordings (head camera). "Replay" = camera next to a simulation of the robot, moved by the joint angles it logged.</div>
+      <div id="recs"><span class="note">loading…</span></div>
     </div>
   </section>
 </main>
@@ -276,6 +329,24 @@ function walk(dir) {
   robot('step', args);
 }
 function look(yaw, pitch) { robot('head', { yaw, pitch, hold: 3, speed: 0.25 }); }
+function reachHold() {
+  const hold = +el('holds').value, jaw = el('jawtest').checked;
+  const t = prompt(`THE ARM WILL MOVE: to the spot, hold ${hold} s${jaw ? ' (gripper closes and opens)' : ''}, back.\nArea clear, e-stop in hand? Hands away from the jaws.\nType REACH to continue:`);
+  if (t === 'REACH') post('/api/execute', { kind: 'reach', confirm: 'REACH', hold, jaw_cycle: jaw });
+}
+let guideTimer = null;
+async function guideTick() {
+  clearTimeout(guideTimer);
+  const box = el('guidetxt');
+  if (!el('guideon').checked) { box.classList.add('hidden'); return; }
+  try {
+    const r = await api('/api/place');
+    box.classList.remove('hidden');
+    box.className = 'banner ' + (r.inside ? 'ok' : r.ok ? 'warn' : 'bad');
+    box.textContent = r.text + (r.height ? '  (' + r.height + ')' : '');
+  } catch (e) {}
+  guideTimer = setTimeout(guideTick, 1500);
+}
 function execute(kind) {
   const word = kind.toUpperCase();
   const t = prompt(`The ARM WILL MOVE (${kind}). Area clear, e-stop in hand?\nType ${word} to continue:`);
@@ -302,6 +373,7 @@ async function outcome(result) {
 // ---- live camera: one <img> MJPEG stream, moved next to the question while one is open
 let liveOn = true;
 try { liveOn = localStorage.getItem('liveOn') !== '0'; } catch (e) {}
+if (new URLSearchParams(location.search).get('live') === '0') liveOn = false;   // ?live=0: no video stream (slow link)
 function liveSrc() { return '/api/live.mjpg?' + (TOKEN ? 'token=' + TOKEN + '&' : '') + 't=' + Date.now(); }
 function setLiveView(on) {
   liveOn = on;
@@ -379,6 +451,7 @@ function renderHeader() {
     else pill('p_body', 'body —');
   }
   pill('p_rec', S.recording || 'rec ?', (S.recording || '').startsWith('RECORDING') ? 'bad' : '');
+  if (S.record_all) { el('recall').checked = S.record_all.on; el('recall_st').textContent = S.record_all.on ? S.record_all.status : ''; }
   const busy = (r && r.busy) || (S.job.running && S.job.name);
   pill('p_busy', busy ? 'busy: ' + busy : 'idle', busy ? 'warn' : '');
   el('b_look').disabled = S.job.running;
@@ -465,6 +538,85 @@ function refreshSel() {
   document.querySelectorAll('#qsvg polygon, #chips .chip').forEach(n => n.classList.toggle('sel', selected.has(+n.dataset.id)));
 }
 
+// ---- step-by-step story of the selected event
+const cm = v => (100 * v).toFixed(0);
+function xyzText(p) { return p ? `${cm(p[0])} cm in front, ${cm(Math.abs(p[1]))} cm to the robot's ${p[1] > 0 ? 'left' : 'right'}, ~${cm(p[2] + 0.75)} cm above the floor` : 'no 3D position'; }
+function fig(src, cap, video) {
+  if (!src) return '';
+  const u = fileUrl(src, false);
+  return `<figure>${video ? `<video src="${u}" controls loop muted preload="metadata"></video>` : `<a href="${u}" target="_blank"><img src="${u}"></a>`}<figcaption>${cap}</figcaption></figure>`;
+}
+function sstep(n, title, cls, tag, body) {
+  return `<div class="sstep ${cls}"><h4>${n} · ${title} <span class="tag">${tag}</span></h4>${body}</div>`;
+}
+let storyKey = '';
+function renderStory() {
+  const e = S.event;
+  const key = e ? JSON.stringify([e.id, e.decision, e.pending && 1, e.plan, e.plan_error, e.attempt, e.executed, e.outcome, Object.keys(e.files)]) : '';
+  if (key === storyKey) return;
+  storyKey = key;
+  if (!e) { el('story').innerHTML = '<span class="note">no event yet</span>'; el('storyid').textContent = ''; return; }
+  el('storyid').textContent = '(' + e.id + ')';
+  const f = e.files, out = [];
+  // 1 look
+  const when = e.looked_at ? new Date(e.looked_at * 1000).toLocaleTimeString() : '';
+  const rows = e.candidates.map(c => `<tr><td>#${c.id}</td><td>${c.conf_median.toFixed(2)}</td><td>${Math.round(100 * c.seen_frac)}%</td><td>${xyzText(c.xyz_pelvis)}</td><td>${c.in_reach ? 'yes' : 'no'}</td></tr>`).join('');
+  out.push(sstep(1, 'Look: camera + depth', e.candidates.length ? 'done' : 'warn', e.candidates.length ? e.candidates.length + ' found' : 'nothing found',
+    `<div class="note">${when} · detector ${e.detector || '?'}${e.trigger ? ' · started by auto-look (live conf ' + e.trigger.okra.best_conf.toFixed(2) + ')' : ''}</div>
+     <div class="imgs">${fig(f['trigger_live.jpg'], 'what triggered it (live frame)')}${fig(f['annotated.jpg'], 'what the Look measured (numbered pods)')}</div>
+     ${rows ? `<table style="margin-top:6px"><thead><tr><th>pod</th><th>conf</th><th>seen</th><th>where (robot's hips)</th><th>comfortable</th></tr></thead><tbody>${rows}</tbody></table>` : ''}`));
+  // 2 operator
+  const d = e.decision;
+  if (e.pending) out.push(sstep(2, 'Is it okra? (you)', 'warn', 'waiting for you', `<div class="note">asked because: ${e.pending.reasons.join('; ')}</div>`));
+  else if (d) {
+    const said = d.action === 'auto' ? 'robot was sure (no question)' : d.unsure ? 'not sure' : d.missed ? 'it missed an okra' : d.target ? 'okra #' + d.target : 'not okra';
+    out.push(sstep(2, 'Is it okra? (you)', d.target ? 'done' : 'warn', said,
+      `<div class="note">${d.operator ? 'answered by ' + d.operator : ''}${d.response_s ? ' after ' + d.response_s + ' s' : ''}${d.note ? ' · ' + d.note : ''}</div>`));
+  } else out.push(sstep(2, 'Is it okra? (you)', 'todo', 'not asked', ''));
+  // 3 plan
+  if (e.plan) out.push(sstep(3, 'Plan + simulation (nothing moves)', 'done', 'planned',
+      `<div class="note">${e.plan.duration_s} s motion, approach pitch ${e.plan.pitch}° · target ${xyzText(e.target_xyz)}</div><div class="imgs">${fig(f['sim.mp4'], 'simulation of the planned grasp', true)}</div>`));
+  else if (e.plan_error) {
+    const a = e.attempt;
+    const why = e.plan_error.safety_gate ? 'the live safety gate stopped it (see the reason)' :
+      a ? `the arm gets to ${cm(a.grasp_gap_m)} cm from the pod and can go no further` + (a.torso_hits && a.torso_hits.length ? `, and on the way the ${a.torso_hits.join(' and ').replace(/_link/g, '').replace(/_/g, ' ')} would pass through the robot's own body` : '') : 'making the attempt video…';
+    out.push(sstep(3, 'Plan + simulation (nothing moves)', 'bad', 'refused',
+      `<div class="note"><b>Why:</b> ${why}. For the right arm, hang the pod in front of the robot's right hip: 39–45 cm out, 3–16 cm to its right, ~90 cm high.</div>
+       <pre class="reason">${e.plan_error.reason.replace(/</g, '&lt;')}</pre>
+       <div class="imgs">${fig(f['attempt_sim.mp4'], 'best effort (picture only, never sent to the robot): how far the arm gets', true)}</div>
+       ${!f['attempt_sim.mp4'] ? `<button onclick="post('/api/attempt',{event:'${e.id}'})">Make the attempt video</button>` : ''}`));
+  } else out.push(sstep(3, 'Plan + simulation (nothing moves)', 'todo', e.target ? 'not planned yet' : 'needs a YES', ''));
+  // 4 motion
+  const ex = e.executed;
+  if (ex) out.push(sstep(4, 'Reach / pick on the robot', ex.aborted ? 'bad' : 'done', ex.aborted ? 'aborted' : 'done',
+      `<div class="note">${ex.aborted ? 'stopped: ' + ex.aborted : 'played to the end'} · the video is in Recordings (okra_reach/pick_${e.id})</div>`));
+  else out.push(sstep(4, 'Reach / pick on the robot', 'todo', 'not run', '<div class="note">only after your typed REACH / PICK</div>'));
+  // recordings around this okra (both times are the robot's clock: Look time and recording start)
+  const near = (RECS || []).filter(x => e.looked_at && x.start_time && x.start_time < e.looked_at + 900 && x.start_time + (x.duration_s || 0) > e.looked_at - 300);
+  if (near.length) out.push(`<div class="sstep"><h4>▶ Videos around this okra</h4><div class="imgs">${near.map(x =>
+      fig(x.replay || x.camera, x.name + (x.replay ? ' (camera + simulation)' : ' (camera)') + ', starts ' + Math.round(x.start_time - e.looked_at) + ' s from the Look', true)).join('')}</div></div>`);
+  // 5 outcome
+  const o = e.outcome;
+  out.push(o ? sstep(5, 'Did it pick the okra?', o.result === 'success' ? 'done' : o.result === 'skipped' ? 'todo' : 'bad', o.result, o.note ? `<div class="note">${o.note}</div>` : '')
+             : sstep(5, 'Did it pick the okra?', 'todo', 'open', ''));
+  el('story').innerHTML = out.join('');
+}
+
+// ---- recordings
+let RECS = [];
+async function loadRecs() {
+  const r = await api('/api/episodes');
+  RECS = r.episodes || []; storyKey = '';
+  el('recs').innerHTML = (r.episodes || []).map(x => `<div class="rec"><div class="row"><b style="flex:1">${x.name}</b><span class="note">${x.duration_s ? x.duration_s + ' s' : ''}</span></div>
+    <div class="row">${x.camera ? `<button onclick="showRec(this,'${x.camera}')">▶ camera</button>` : ''}
+      ${x.replay ? `<button onclick="showRec(this,'${x.replay}')">▶ replay (camera + simulation)</button>` : `<button onclick="post('/api/replay',{episode:'${x.name}'})">make replay</button>`}</div></div>`).join('') || '<span class="note">no recordings</span>';
+}
+function showRec(btn, src) {
+  const box = btn.closest('.rec'); let v = box.querySelector('video');
+  if (!v) { v = document.createElement('video'); v.controls = true; box.appendChild(v); }
+  v.src = fileUrl(src, false); v.play();
+}
+
 async function loadEvents() {
   const r = await api('/api/events');
   el('hist').innerHTML = (r.events || []).map(e => `<tr class="click" data-id="${e.event_id}"><td>${e.event_id}</td><td>${e.asked}</td><td>${e.answer}</td><td>${e.n_okra}</td><td>${e.outcome}</td></tr>`).join('');
@@ -472,14 +624,14 @@ async function loadEvents() {
 }
 
 async function tick() {
-  try { S = await api('/api/state'); renderHeader(); renderLog(); renderEvent(); renderLive(); renderAuto(S.auto); attention(S.event); }
+  try { S = await api('/api/state'); renderHeader(); renderLog(); renderEvent(); renderLive(); renderAuto(S.auto); attention(S.event); renderStory(); }
   catch (e) { pill('p_agent', 'UI server offline', 'bad'); }
   setTimeout(tick, 500);
 }
 const urlOp = new URLSearchParams(location.search).get('operator');
 if (urlOp) localStorage.setItem('operator', urlOp);
 if (!localStorage.getItem('operator')) { const n = prompt('Operator name (saved in this browser, stored with every answer):'); if (n) localStorage.setItem('operator', n); }
-tick(); loadEvents(); setInterval(loadEvents, 15000);
+tick(); loadEvents(); loadRecs(); setInterval(loadEvents, 15000); setInterval(loadRecs, 30000);
 </script>
 </body>
 </html>

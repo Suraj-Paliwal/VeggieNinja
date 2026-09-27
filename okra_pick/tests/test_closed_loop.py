@@ -50,9 +50,9 @@ class SwayRobot(TP.FakeRobot):
             q[i] = self.qarm[n]
         return q
 
-    def send_arm(self, q_upper, weight):
+    def send_arm(self, q_upper, weight, tau_upper=None):
         self.k += 1
-        super().send_arm(q_upper, weight)
+        super().send_arm(q_upper, weight, tau_upper)
 
     def send_grip(self, q):
         if q == C.GRIP_CLOSE_Q and self.at_close is None:

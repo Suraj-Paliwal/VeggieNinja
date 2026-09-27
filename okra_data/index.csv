@@ -13,3 +13,15 @@ example_synthetic,0000-examples,0,,,,,,0,0,,,,,False,True,False,,
 20260927_105623,2026-09-27,0,,,,,,0,0,,,,,False,False,False,,
 20260927_105718,2026-09-27,0,,,,,,0,0,,,,,False,False,False,,
 20260927_105806,2026-09-27,1,0.858,always,True,policy: always ask | outside the arm's reach,1,1,0,False,False,terminal (user: go and grab it),9.4,True,False,False,,okra_seg_s02.pt
+20260927_131136,2026-09-27,2,0.889,,,,,0,0,,,,,False,False,False,,okra_seg_s02.pt
+20260927_131426,2026-09-27,8,0.894,,,,,0,0,,,,,False,False,False,,okra_seg_s02.pt
+20260927_131712,2026-09-27,1,0.104,,,,,0,0,,,,,False,False,False,,okra_seg_s02.pt
+20260927_132456,2026-09-27,0,,,False,operator: fixed point,,0,0,,,,,True,False,False,,
+20260927_132525,2026-09-27,0,,,False,operator: fixed point,,0,0,,,,,True,True,True,,
+20260927_134704,2026-09-27,0,,,False,operator: fixed point,,0,0,,,,,True,True,True,,
+20260927_135519,2026-09-27,0,,,False,operator: fixed point,,0,0,,,,,True,True,True,,
+20260927_140049,2026-09-27,1,0.871,always,True,policy: always ask | sanity filter rejected it in 100% of sightings (colour),1,1,0,False,False,terminal (user placed this okra for the first pick),21.4,True,True,False,,okra_seg_s02.pt
+20260927_140346,2026-09-27,1,0.876,always,True,policy: always ask | sanity filter rejected it in 100% of sightings (colour),1,1,0,False,False,suraj,142.4,True,True,True,,okra_seg_s02.pt
+20260927_141147,2026-09-27,0,,,False,operator: fixed point,,0,0,,,,,True,True,False,,
+20260927_141445,2026-09-27,1,0.839,uncertain,True,sanity filter rejected it in 100% of sightings (colour),1,1,0,False,False,suraj,674.2,True,False,False,,okra_seg_s02.pt
+20260927_142924,2026-09-27,1,0.877,always,True,policy: always ask | sanity filter rejected it in 100% of sightings (colour),1,1,0,False,False,suraj,188.4,True,True,True,,okra_seg_s02.pt

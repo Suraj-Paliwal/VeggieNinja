@@ -67,8 +67,9 @@ def reading(chain, rs, z_pod=None):
         tips.append("%d cm %s the robot" % (round(100 * abs(dx)) + 2, "AWAY from" if dx > 0 else "CLOSER to"))
     if dy:
         tips.append("%d cm to the robot's %s" % (round(100 * abs(dy)) + 2, "LEFT" if dy > 0 else "RIGHT"))
-    where = "pod at %.0f cm in front, %.0f cm to the robot's %s (conf %.2f)" % (
-        100 * p[0], 100 * abs(p[1]), "left" if p[1] > 0 else "right", px["conf"])
+    where = "pod at %.0f cm in front, %.0f cm to the robot's %s (conf %.2f%s)" % (
+        100 * p[0], 100 * abs(p[1]), "left" if p[1] > 0 else "right", px["conf"],
+        ", filter says %s: you confirm it" % px["rejected"] if px.get("rejected") else "")
     if not tips:
         return where + "  ->  INSIDE the zone. Now run Look.", True
     return where + "  ->  move it " + " and ".join(tips), False

@@ -6,6 +6,8 @@ Execute a planned okra grasp on the G1. Runs ON THE ROBOT (Orin) with ~/g1_rec/p
     PYTHONPATH=~/g1_rec/pylib python3 arm_player.py trajectory.json --dry      # all checks, nothing sent
     PYTHONPATH=~/g1_rec/pylib python3 arm_player.py --gripper open|close       # gripper only
     ... arm_player.py trajectory.json --until approach   # stop after a segment (e.g. reach test, no grasp)
+    ... arm_player.py trajectory.json --until approach --hold 20   # ...and hold there 20 s (place a pod at the
+                                                                   #    gripper), then go back; STOP returns early
 
 Before moving: balance state (FSM 200/500/501), upright, fresh rt/lowstate, and the plan's start pose
 matches the arm now (else the plan is stale). Then: open gripper -> blend arm_sdk in over 2 s holding
@@ -127,11 +129,13 @@ class Robot:
     def age(self):
         return time.time() - self.ls_t
 
-    def send_arm(self, q_upper, weight):
-        """q_upper: 17 targets for motors 12..28; weight: arm_sdk blend 0..1."""
+    def send_arm(self, q_upper, weight, tau_upper=None):
+        """q_upper: 17 targets for motors 12..28; weight: arm_sdk blend 0..1; tau_upper: 17 feed-forward torques
+        (gravity compensation from the plan) or None."""
         for k, i in enumerate(C.UPPER_IDX):
             m = self.cmd.motor_cmd[i]
-            m.q, m.dq, m.tau = float(q_upper[k]), 0.0, 0.0
+            t = 0.0 if tau_upper is None else max(-C.GRAVITY_TAU_MAX, min(C.GRAVITY_TAU_MAX, float(tau_upper[k])))
+            m.q, m.dq, m.tau = float(q_upper[k]), 0.0, t
             m.kp, m.kd = (C.KP_WAIST, C.KD_WAIST) if i in C.WAIST_IDX else (C.KP_ARM, C.KD_ARM)
         self.cmd.motor_cmd[C.WEIGHT_IDX].q = float(weight)
         self.cmd.crc = self.crc.Crc(self.cmd)
@@ -164,9 +168,11 @@ class Abort(Exception):
 
 
 class Player:
-    def __init__(self, robot, traj, until, closed_loop=True):
+    def __init__(self, robot, traj, until, closed_loop=True, hold_s=0.0, jaw_cycle=False):
         self.r, self.t = robot, traj
         self.Q = np.array(traj["q"])
+        ff = traj.get("tau_ff")                                  # gravity feed-forward per sample (planner)
+        self.TAU = np.array(ff) * C.GRAVITY_FF_GAIN if ff and C.GRAVITY_FF_GAIN else None
         self.corr = None
         if closed_loop and traj.get("target", {}).get("q") and traj.get("pod_xyz"):
             from closed_loop import Corrector
@@ -175,6 +181,8 @@ class Player:
         self.cmd_q = self.Q[0].copy()
         self.corr_log = []
         self.until = until
+        self.hold_s = hold_s if until else 0.0
+        self.jaw_cycle = jaw_cycle and self.hold_s >= 10      # close + open the empty gripper during the hold
         self.log = []
         self.stop = STOP
         self.holding = False
@@ -208,18 +216,27 @@ class Player:
             raise Abort("tracking error %.2f rad on %s (blocked?)" % (err.max(), C.RIGHT_ARM[int(err.argmax())]))
         if seg == "pull" and self.holding:
             tau = np.abs(self.r.tau(C.RIGHT_ARM_IDX))
-            if tau.max() > C.MAX_PULL_TAU:
+            if self.TAU is not None:                        # only the part beyond holding the arm up
+                ff = self.tau(i)[[k for k, j in enumerate(C.UPPER_IDX) if j in C.RIGHT_ARM_IDX]]
+                extra = np.abs(self.r.tau(C.RIGHT_ARM_IDX) - ff)
+                if extra.max() > C.MAX_PULL_EXTRA_TAU or tau.max() > C.MAX_PULL_TAU + C.GRAVITY_TAU_MAX:
+                    raise Abort("pull torque %.1f Nm beyond gravity on %s (pod did not come off)"
+                                % (extra.max(), C.RIGHT_ARM[int(extra.argmax())]))
+            elif tau.max() > C.MAX_PULL_TAU:
                 raise Abort("pull torque %.1f Nm on %s (pod did not come off)" % (tau.max(), C.RIGHT_ARM[int(tau.argmax())]))
+
+    def tau(self, i):
+        return None if self.TAU is None else self.TAU[min(max(0, i), len(self.TAU) - 1)]
 
     def upper_with_arm(self, hold_upper, q_arm):
         u = hold_upper.copy()
         u[[k for k, i in enumerate(C.UPPER_IDX) if i in C.RIGHT_ARM_IDX]] = q_arm
         return u
 
-    def blend(self, hold_upper, q_arm, w0, w1, secs=2.0):
+    def blend(self, hold_upper, q_arm, w0, w1, secs=2.0, i_tau=0):
         n = int(secs / C.DT)
         for k in range(n + 1):
-            self.r.send_arm(self.upper_with_arm(hold_upper, q_arm), w0 + (w1 - w0) * k / n)
+            self.r.send_arm(self.upper_with_arm(hold_upper, q_arm), w0 + (w1 - w0) * k / n, self.tau(i_tau))
             if self.r.grip_target is not None:
                 self.r.send_grip(self.r.grip_target)
             time.sleep(C.DT)
@@ -270,14 +287,30 @@ class Player:
                     self.cmd_q = self.corr.command(self.Q[i], w)
                 else:
                     self.cmd_q = self.Q[i]
-                self.r.send_arm(self.upper_with_arm(hold_upper, self.cmd_q), 1.0)
+                self.r.send_arm(self.upper_with_arm(hold_upper, self.cmd_q), 1.0, self.tau(i))
                 self.r.send_grip(self.r.grip_target)
                 self.log.append([time.time(), i] + self.r.q(C.RIGHT_ARM_IDX).tolist())
                 i += 1
                 done = i
                 next_t += C.DT
                 time.sleep(max(0.0, next_t - time.time()))
-            q_final = self.Q[end - 1]
+            if self.hold_s > 0:                            # hold at the end point, every check still running
+                print("holding at the end of %s for %.0f s" % (self.until, self.hold_s), flush=True)
+                t0h = time.time()
+                t_end, i_hold = t0h + self.hold_s, end - 1
+                jaw = "open"
+                while time.time() < t_end:
+                    if self.jaw_cycle:                     # jaw test: see which way the jaws close (camera)
+                        want = "close" if 3.0 <= time.time() - t0h < 7.0 else "open"
+                        if want != jaw:
+                            jaw = want
+                            print("jaw test: gripper %s (q now %s)" % (jaw, self.r.grip_q), flush=True)
+                            self.r.send_grip(C.GRIP_CLOSE_Q if jaw == "close" else C.GRIP_OPEN_Q)
+                    self.check(i_hold, seg_of[i_hold], hold_upper, r0, p0)
+                    self.r.send_arm(self.upper_with_arm(hold_upper, self.cmd_q), 1.0, self.tau(i_hold))
+                    self.r.send_grip(self.r.grip_target)
+                    time.sleep(C.DT)
+            q_final, i_final = self.Q[end - 1], end - 1
             print("done%s" % (" (stopped after %s)" % self.until if self.until else ""), flush=True)
         except Exception as e:  # noqa: BLE001 - Abort, or anything unexpected: always take the safe exit
             if not isinstance(e, Abort):
@@ -288,7 +321,7 @@ class Player:
             if seg in ("retreat", "home"):
                 # the pod is off the plant and in the gripper: going back would push it into the plant
                 print("past the pull: stopping here, keeping the gripper closed", flush=True)
-                q_final = self.Q[max(0, i - 1)]
+                q_final, i_final = self.Q[max(0, i - 1)], max(0, i - 1)
             else:
                 if self.holding or self.r.grip_target == C.GRIP_CLOSE_Q:
                     print("gripper: open (let go of the plant)", flush=True)
@@ -298,18 +331,18 @@ class Player:
                 for j in range(max(0, i - 1), -1, -1):
                     if self.r.age() > 1.0:
                         break
-                    self.r.send_arm(self.upper_with_arm(hold_upper, self.Q[j]), 1.0)
+                    self.r.send_arm(self.upper_with_arm(hold_upper, self.Q[j]), 1.0, self.tau(j))
                     self.r.send_grip(self.r.grip_target)
                     time.sleep(C.DT)
-                q_final = self.Q[0]
+                q_final, i_final = self.Q[0], 0
         if self.until and not getattr(self, "aborted", None):
             print("returning to start after --until", flush=True)
             for j in range(end - 1, -1, -1):
-                self.r.send_arm(self.upper_with_arm(hold_upper, self.Q[j]), 1.0)
+                self.r.send_arm(self.upper_with_arm(hold_upper, self.Q[j]), 1.0, self.tau(j))
                 time.sleep(C.DT)
-            q_final = self.Q[0]
+            q_final, i_final = self.Q[0], 0
         print("blend out (2 s)", flush=True)
-        self.blend(hold_upper, q_final, 1.0, 0.0)
+        self.blend(hold_upper, q_final, 1.0, 0.0, i_tau=i_final)
         return getattr(self, "aborted", None)
 
 
@@ -352,6 +385,8 @@ def main():
     ap.add_argument("--gripper", choices=["open", "close"])
     ap.add_argument("--iface", default="auto", help="auto = interface of the route to the motion controller")
     ap.add_argument("--open-loop", action="store_true", help="disable the body-motion correction")
+    ap.add_argument("--hold", type=float, default=0.0, help="with --until: hold at the end point this many s (max 60)")
+    ap.add_argument("--jaw-cycle", action="store_true", help="with --hold >= 10: close (3-7 s) and open the empty gripper")
     args = ap.parse_args()
     if args.iface == "auto":
         from safety_probe import detect_iface       # measured, not assumed
@@ -382,7 +417,8 @@ def main():
     if STOP.is_set():
         print("REFUSED: stopped before moving")
         sys.exit(1)
-    player = Player(robot, traj, args.until, closed_loop=not args.open_loop)
+    player = Player(robot, traj, args.until, closed_loop=not args.open_loop, hold_s=min(60.0, max(0.0, args.hold)),
+                    jaw_cycle=args.jaw_cycle)
     aborted = player.run()
     log = os.path.splitext(args.trajectory)[0] + "_executed.json"
     json.dump({"aborted": aborted, "log": player.log, "corrections": player.corr_log}, open(log, "w"))
